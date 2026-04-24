@@ -69,7 +69,8 @@ async def set_bot_commands(bot_instance: Bot):
 
 async def on_startup(bot: Bot):
     """Actions to perform when bot starts"""
-    logger.info("Bot is starting up...")
+    logger.info("Startup complete (minimal mode)")
+    
     
     # Неблокирующий прогрев кэша с обработкой ошибок
     try:
@@ -103,7 +104,7 @@ async def on_startup(bot: Bot):
     # Уведомление админов (не критично)
     for admin_id in cfg.ADMIN_IDS:
         try:
-            await bot.send_message(admin_id, "✅ CryptoPulse AI bot started!")
+            await bot.send_message(admin_id, "✅ Bot started")
         except Exception as e:
             logger.warning(f"Failed to notify admin {admin_id}: {e}")
     
