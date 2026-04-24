@@ -1019,7 +1019,7 @@ async def callback_help(callback: CallbackQuery):
 # ===================================================================
 
 async def admin_cmd(message: Message):
-    if not Config.is_admin(message.from_user.id):
+    if message.from_user.id not in Config.ADMIN_IDS:
         await message.answer("⛔ Access denied.")
         return
     stats = db.get_stats()
@@ -1039,7 +1039,7 @@ async def admin_cmd(message: Message):
     await message.answer(text, parse_mode=ParseMode.MARKDOWN)
 
 async def admin_stats_cmd(message: Message):
-    if not Config.is_admin(message.from_user.id):
+    if message.from_user.id not in Config.ADMIN_IDS:
         return
     stats = db.get_stats()
     await message.answer(
@@ -1054,13 +1054,13 @@ async def admin_stats_cmd(message: Message):
     )
 
 async def admin_broadcast_cmd(message: Message, state: FSMContext):
-    if not Config.is_admin(message.from_user.id):
+    if message.from_user.id not in Config.ADMIN_IDS:
         return
     await message.answer("📢 Send the message to broadcast:")
     await state.set_state(AdminStates.waiting_broadcast)
 
 async def admin_broadcast_send(message: Message, state: FSMContext):
-    if not Config.is_admin(message.from_user.id):
+    if message.from_user.id not in Config.ADMIN_IDS:
         await state.clear()
         return
     text = message.text
@@ -1080,7 +1080,7 @@ async def admin_broadcast_send(message: Message, state: FSMContext):
     await state.clear()
 
 async def admin_ban_cmd(message: Message):
-    if not Config.is_admin(message.from_user.id):
+    if message.from_user.id not in Config.ADMIN_IDS:
         return
     parts = message.text.split()
     if len(parts) < 2:
@@ -1093,7 +1093,7 @@ async def admin_ban_cmd(message: Message):
     await message.answer(f"✅ User {target} banned. Reason: {reason}")
 
 async def admin_unban_cmd(message: Message):
-    if not Config.is_admin(message.from_user.id):
+    if message.from_user.id not in Config.ADMIN_IDS:
         return
     parts = message.text.split()
     if len(parts) < 2:
