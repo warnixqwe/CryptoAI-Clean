@@ -20,6 +20,7 @@ from payments import get_payment_manager
 from scheduler_tasks import start_scheduler, stop_scheduler
 import bot_handlers
 import admin_panel
+from aiogram.client.default import DefaultBotProperties
 
 # ===================================================================
 # Global instances
@@ -34,7 +35,7 @@ logger = None
 # Bot command menu setup
 # ===================================================================
 
-async def set_bot_commands(bot_instance: Bot):
+async def set_bot_commands(bot_instance = Bot(token=cfg.API_TOKEN, parse_mode="HTML"): Bot):
     """Set Telegram bot command menu"""
     commands = [
         BotCommand(command="start", description="Start the bot / register"),
@@ -170,7 +171,7 @@ async def run_polling():
     logger.info("Starting bot in polling mode")
     
     # Create bot and dispatcher
-    bot_instance = Bot(token=cfg.API_TOKEN, parse_mode="HTML")
+    bot_instance = Bot(token=cfg.API_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
     storage = MemoryStorage()
     dispatcher = Dispatcher(storage=storage)
     
