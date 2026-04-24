@@ -759,7 +759,7 @@ async def start_cmd(message: Message, state: FSMContext):
         f"🚀 *Welcome to CryptoPulse AI*, {user.first_name}!\n\n"
         f"AI-powered crypto signals with TP/SL.\n"
         f"💰 Premium: ${Config.SUBSCRIPTION_PRICE_USD}/{Config.SUBSCRIPTION_DAYS} days\n"
-        f"Use /menu"
+        f"Use /menu\n"
         f"Use /app to open web app",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=main_menu()
