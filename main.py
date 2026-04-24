@@ -148,6 +148,9 @@ class Database:
         conn.row_factory = sqlite3.Row
         try:
             yield conn.cursor()
+            conn = sqlite3.connect(self.db_path, timeout=30, check_same_thread=False)
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.row_factory = sqlite3.Row
             conn.commit()
         except:
             conn.rollback()
