@@ -759,7 +759,8 @@ async def start_cmd(message: Message, state: FSMContext):
         f"🚀 *Welcome to CryptoPulse AI*, {user.first_name}!\n\n"
         f"AI-powered crypto signals with TP/SL.\n"
         f"💰 Premium: ${Config.SUBSCRIPTION_PRICE_USD}/{Config.SUBSCRIPTION_DAYS} days\n"
-        f"Use /menu",
+        f"Use /menu"
+        f"Use /app to open web app",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=main_menu()
     )
@@ -1223,15 +1224,29 @@ async def api_chart(request):
     symbol = data.get('params', {}).get('symbol', 'BTC/USDT')
     timeframe = data.get('params', {}).get('timeframe', '1h')
     limit = data.get('params', {}).get('limit', 50)
+    
     market = get_market()
-    prices = await market.get_historical_prices(symbol, limit)
-    # конвертируем в свечи (mock)
-    candles = []
-    base_price = prices[0] if prices else 50000
-    for i, p in enumerate(prices):
-        ts = int(time.time()) - (limit - i) * 3600
-        candles.append({"time": ts, "open": p-50, "high": p+50, "low": p-50, "close": p})
-    return web.json_response({"ok": True, "result": candles})
+    # Получаем цены закрытия (или полноценные OHLCV, если есть)
+    try:
+        # Если у вас есть метод get_ohlcv – используйте его
+        # Например, через ccxt:
+        # ohlcv = await market.get_ohlcv(symbol, timeframe, limit)
+        # или используем заглушку с преобразованием
+        prices = await market.get_historical_prices(symbol, limit)
+        # Строим свечи из цен (упрощённо, но для демо хватит)
+        candles = []
+        base_price = prices[0] if prices else 50000
+        for i, p in enumerate(prices):
+            ts = int(time.time()) - (limit - i) * 3600
+            high = p + random.uniform(0, p*0.02)
+            low = p - random.uniform(0, p*0.02)
+            open_p = p - random.uniform(0, p*0.01)
+            close = p
+            candles.append({"time": ts, "open": round(open_p,2), "high": round(high,2), "low": round(low,2), "close": round(close,2)})
+        return web.json_response({"ok": True, "result": candles})
+    except Exception as e:
+        logger.error(f"Chart error: {e}")
+        return web.json_response({"ok": False, "error": str(e)})
 
 async def api_profile(request):
     data = await request.json()

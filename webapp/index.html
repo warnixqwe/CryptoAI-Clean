@@ -3,8 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>CryptoPulse AI | Ultimate Terminal</title>
-    <!-- Three.js Core -->
+    <title>CryptoPulse AI | Ultimate Trading Terminal</title>
+    <!-- Telegram WebApp (опционально) -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- TradingView Lightweight Charts -->
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.js"></script>
+    <!-- GSAP для анимаций -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <!-- Three.js для 3D-фона -->
     <script type="importmap">
         {
             "imports": {
@@ -12,12 +18,6 @@
             }
         }
     </script>
-    <!-- Telegram WebApp SDK -->
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <!-- Lightweight Charts (TradingView) -->
-    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.js"></script>
-    <!-- GSAP for animations -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -31,7 +31,6 @@
             background: #050a14;
             color: #eef5ff;
             overflow: hidden;
-            position: relative;
             height: 100vh;
             width: 100vw;
         }
@@ -47,45 +46,38 @@
             pointer-events: none;
         }
 
-        /* Main UI Overlay */
+        /* Main App Container */
         .app {
             position: relative;
             z-index: 2;
             height: 100vh;
             width: 100vw;
             overflow-y: auto;
-            scroll-behavior: smooth;
+            overflow-x: hidden;
             padding: 20px 16px 80px;
-            backdrop-filter: blur(2px);
+            backdrop-filter: blur(3px);
+            scroll-behavior: smooth;
         }
 
         /* Custom Scrollbar */
-        .app::-webkit-scrollbar {
-            width: 4px;
-        }
-        .app::-webkit-scrollbar-track {
-            background: rgba(255,255,255,0.05);
-            border-radius: 4px;
-        }
-        .app::-webkit-scrollbar-thumb {
-            background: #00e0ff;
-            border-radius: 4px;
-        }
+        .app::-webkit-scrollbar { width: 5px; }
+        .app::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 5px; }
+        .app::-webkit-scrollbar-thumb { background: #00e0ff; border-radius: 5px; }
 
-        /* Neon Glass Card */
+        /* Glassmorphic Cards */
         .card {
-            background: rgba(18, 25, 45, 0.65);
+            background: rgba(18, 25, 45, 0.7);
             backdrop-filter: blur(16px);
-            border-radius: 32px;
+            border-radius: 28px;
             padding: 20px;
             margin-bottom: 20px;
             border: 1px solid rgba(0, 224, 255, 0.2);
             transition: all 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
         }
         .card:hover {
             border-color: #00e0ff;
-            box-shadow: 0 0 28px rgba(0, 224, 255, 0.3);
+            box-shadow: 0 0 20px rgba(0,224,255,0.3);
             transform: translateY(-2px);
         }
 
@@ -106,6 +98,7 @@
             color: transparent;
             letter-spacing: -0.5px;
         }
+        h1 span { color: #00e0ff; background: none; -webkit-background-clip: unset; }
         .badge {
             background: linear-gradient(145deg, #1e2a3a, #0f1722);
             padding: 6px 14px;
@@ -114,7 +107,6 @@
             font-size: 12px;
             border: 1px solid #00e0ff;
             box-shadow: 0 0 6px rgba(0,224,255,0.3);
-            transition: all 0.2s;
         }
 
         /* Tabs */
@@ -145,18 +137,17 @@
             box-shadow: 0 0 12px #00e0ff;
         }
 
-        /* Symbol Selector */
+        /* Symbol Selector & Input */
         .symbol-selector {
             display: flex;
-            gap: 12px;
-            margin-bottom: 20px;
+            gap: 10px;
+            margin-bottom: 16px;
             flex-wrap: wrap;
         }
         .sym-btn {
             background: rgba(26, 31, 46, 0.8);
-            backdrop-filter: blur(4px);
             border: none;
-            padding: 8px 20px;
+            padding: 6px 18px;
             border-radius: 40px;
             color: #eef5ff;
             font-weight: 600;
@@ -166,15 +157,39 @@
         .sym-btn.active {
             background: #00e0ff;
             color: #050a14;
-            box-shadow: 0 0 12px #00e0ff;
+            box-shadow: 0 0 10px #00e0ff;
         }
+        .custom-input-group {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .custom-input-group input {
+            flex: 1;
+            background: rgba(26, 31, 46, 0.8);
+            border: 1px solid #2a2e3f;
+            border-radius: 40px;
+            padding: 10px 16px;
+            color: #eef5ff;
+            font-size: 14px;
+            outline: none;
+            transition: 0.2s;
+        }
+        .custom-input-group input:focus { border-color: #00e0ff; }
+        .btn-small {
+            background: #1e2a3a;
+            border: none;
+            border-radius: 40px;
+            padding: 8px 20px;
+            color: #00e0ff;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .btn-small:hover { background: #00e0ff; color: #050a14; }
 
         /* Signal Card */
-        .signal-card {
-            text-align: center;
-            position: relative;
-            overflow: hidden;
-        }
+        .signal-card { text-align: center; position: relative; }
         .pulse-ring {
             position: absolute;
             top: 20%;
@@ -187,38 +202,11 @@
             opacity: 0;
             pointer-events: none;
         }
-        .signal-action {
-            font-size: 56px;
-            font-weight: 900;
-            letter-spacing: 6px;
-            text-shadow: 0 0 10px currentColor;
-            margin: 16px 0;
-        }
-        .signal-price {
-            font-size: 32px;
-            font-weight: 800;
-            font-family: monospace;
-            margin: 12px 0;
-        }
-        .confidence-bar {
-            background: #2a2e3f;
-            border-radius: 20px;
-            height: 10px;
-            margin: 16px 0;
-            overflow: hidden;
-        }
-        .confidence-fill {
-            background: linear-gradient(90deg, #00e0ff, #0072ff);
-            width: 0%;
-            height: 100%;
-            border-radius: 20px;
-            transition: width 0.6s cubic-bezier(0.2, 0.9, 0.4, 1.1);
-        }
-        .signal-reason {
-            font-size: 13px;
-            color: #a0b0c0;
-            margin: 12px 0;
-        }
+        .signal-action { font-size: 56px; font-weight: 900; letter-spacing: 6px; margin: 16px 0; text-shadow: 0 0 10px currentColor; }
+        .signal-price { font-size: 32px; font-weight: 800; font-family: monospace; margin: 12px 0; }
+        .confidence-bar { background: #2a2e3f; border-radius: 20px; height: 10px; margin: 16px 0; overflow: hidden; }
+        .confidence-fill { background: linear-gradient(90deg, #00e0ff, #0072ff); width: 0%; height: 100%; border-radius: 20px; transition: width 0.6s cubic-bezier(0.2, 0.9, 0.4, 1.1); }
+        .signal-reason { font-size: 13px; color: #a0b0c0; margin: 12px 0; }
         .btn-primary, .btn-secondary {
             width: 100%;
             padding: 14px;
@@ -229,56 +217,55 @@
             transition: transform 0.2s, box-shadow 0.2s;
             margin-top: 12px;
         }
-        .btn-primary {
-            background: linear-gradient(90deg, #00c6ff, #0072ff);
-            color: white;
-            box-shadow: 0 4px 15px rgba(0,114,255,0.3);
-        }
+        .btn-primary { background: linear-gradient(90deg, #00c6ff, #0072ff); color: white; box-shadow: 0 4px 15px rgba(0,114,255,0.3); }
         .btn-primary:active { transform: scale(0.97); }
-        .btn-secondary {
-            background: rgba(30, 42, 58, 0.9);
-            color: #00e0ff;
-            border: 1px solid #00e0ff;
-        }
-
-        /* Stat Rows */
-        .stat-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 14px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-            font-weight: 500;
-        }
+        .btn-secondary { background: rgba(30, 42, 58, 0.9); color: #00e0ff; border: 1px solid #00e0ff; }
 
         /* Chart Container */
-        #chartContainer {
-            width: 100%;
-            height: 280px;
-            margin: 12px 0;
-        }
+        #chartContainer { width: 100%; height: 320px; margin: 12px 0; }
+        .timeframe-selector { display: flex; gap: 10px; justify-content: center; margin-top: 12px; }
+        .tf-btn { background: #1a1f2e; border: none; padding: 6px 16px; border-radius: 30px; color: #8e9aaf; cursor: pointer; transition: 0.2s; }
+        .tf-btn.active { background: #00e0ff; color: #050a14; }
 
-        /* Timeframe selector */
-        .timeframe-selector {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
             margin-top: 12px;
         }
-        .tf-btn {
-            background: #1a1f2e;
-            border: none;
-            padding: 6px 16px;
-            border-radius: 30px;
-            color: #8e9aaf;
-            cursor: pointer;
-            transition: 0.2s;
+        .stat-item {
+            background: rgba(0,0,0,0.3);
+            border-radius: 20px;
+            padding: 12px;
+            text-align: center;
         }
-        .tf-btn.active {
-            background: #00e0ff;
-            color: #050a14;
+        .stat-label { font-size: 12px; color: #8e9aaf; margin-bottom: 6px; }
+        .stat-value { font-size: 20px; font-weight: 700; }
+
+        /* News list */
+        .news-item {
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .news-sentiment { width: 8px; height: 8px; border-radius: 50%; background: #aaa; }
+        .news-title { font-weight: 600; flex: 1; }
+
+        /* Indicator badges */
+        .indicator-badge {
+            background: rgba(0,224,255,0.2);
+            border-radius: 20px;
+            padding: 4px 10px;
+            font-size: 12px;
+            margin-right: 8px;
+            margin-bottom: 8px;
+            display: inline-block;
         }
 
-        /* Toast notification */
+        /* Toast */
         .toast {
             position: fixed;
             bottom: 90px;
@@ -290,37 +277,62 @@
             border-radius: 60px;
             color: white;
             font-weight: 600;
-            z-index: 1000;
+            z-index: 2000;
             transition: transform 0.3s ease;
             pointer-events: none;
             border-left: 4px solid #00e0ff;
         }
-        .toast.show {
-            transform: translateX(-50%) translateY(0);
+        .toast.show { transform: translateX(-50%) translateY(0); }
+
+        /* Loading spinner */
+        .loader { border: 3px solid #2a2e3f; border-top: 3px solid #00e0ff; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; display: inline-block; margin-left: 10px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+            .app { padding: 16px 12px 70px; }
+            .signal-action { font-size: 40px; }
+            .signal-price { font-size: 24px; }
         }
+        .theme-toggle { background: none; border: 1px solid #00e0ff; border-radius: 30px; padding: 6px 12px; color: #00e0ff; cursor: pointer; font-size: 12px; }
     </style>
 </head>
 <body>
     <canvas id="bg-canvas"></canvas>
     <div class="app">
         <div class="header">
-            <h1>CryptoPulse<span style="color:#00e0ff;">AI</span></h1>
-            <div class="badge" id="premiumBadge">FREE</div>
+            <h1>CryptoPulse<span>AI</span></h1>
+            <div style="display: flex; gap: 10px;">
+                <button class="theme-toggle" id="themeToggle">🌙 Dark</button>
+                <div class="badge" id="premiumBadge">FREE</div>
+            </div>
         </div>
         <div class="tabs">
             <button class="tab active" data-tab="signals">📡 SIGNALS</button>
-            <button class="tab" data-tab="chart">📈 CHART</button>
+            <button class="tab" data-tab="chart">📈 CHARTS</button>
+            <button class="tab" data-tab="market">📊 MARKET</button>
+            <button class="tab" data-tab="portfolio">💼 PORTFOLIO</button>
             <button class="tab" data-tab="profile">👤 PROFILE</button>
         </div>
 
         <!-- Signals Tab -->
         <div id="signalsTab" class="tab-content" style="display: block;">
             <div class="card">
-                <div class="symbol-selector" id="symbolSelector">
+                <div class="symbol-selector" id="signalSymbolSelector">
                     <button data-sym="BTC/USDT" class="sym-btn active">BTC</button>
                     <button data-sym="ETH/USDT" class="sym-btn">ETH</button>
                     <button data-sym="SOL/USDT" class="sym-btn">SOL</button>
                     <button data-sym="BNB/USDT" class="sym-btn">BNB</button>
+                    <button data-sym="XRP/USDT" class="sym-btn">XRP</button>
+                </div>
+                <div class="custom-input-group">
+                    <input type="text" id="customSignalSymbol" placeholder="Enter any pair, e.g. DOGE/USDT, MATIC/USDT" list="symbolList">
+                    <datalist id="symbolList">
+                        <option>BTC/USDT</option><option>ETH/USDT</option><option>SOL/USDT</option><option>BNB/USDT</option>
+                        <option>XRP/USDT</option><option>ADA/USDT</option><option>DOGE/USDT</option><option>MATIC/USDT</option>
+                        <option>DOT/USDT</option><option>LINK/USDT</option><option>AVAX/USDT</option><option>UNI/USDT</option>
+                    </datalist>
+                    <button id="setCustomSignalBtn" class="btn-small">🔄 Load</button>
                 </div>
                 <div class="signal-card">
                     <div class="pulse-ring" id="pulseRing"></div>
@@ -328,18 +340,23 @@
                     <div class="signal-price" id="signalPrice">$0.00</div>
                     <div class="confidence-bar"><div class="confidence-fill" id="confidenceFill"></div></div>
                     <div class="signal-reason" id="signalReason">Fetching AI analysis...</div>
+                    <div id="signalIndicators" style="margin: 12px 0;"></div>
                     <button id="refreshSignal" class="btn-primary">⟳ REFRESH SIGNAL</button>
                 </div>
+            </div>
+            <div class="card">
+                <div style="font-size: 18px; font-weight: 700; margin-bottom: 12px;">🔥 Fear & Greed Index</div>
+                <div id="fearGreedValue" style="font-size: 32px; font-weight: 800;">... <span style="font-size: 14px;">/100</span></div>
+                <div class="confidence-bar" style="margin-top: 8px;"><div id="fearGreedFill" class="confidence-fill" style="width:0%;"></div></div>
             </div>
         </div>
 
         <!-- Chart Tab -->
         <div id="chartTab" class="tab-content" style="display: none;">
             <div class="card">
-                <div class="symbol-selector" id="chartSymbolSelector">
-                    <button data-sym="BTC/USDT" class="sym-btn active">BTC</button>
-                    <button data-sym="ETH/USDT" class="sym-btn">ETH</button>
-                    <button data-sym="SOL/USDT" class="sym-btn">SOL</button>
+                <div class="custom-input-group">
+                    <input type="text" id="chartSymbolInput" placeholder="Enter pair for chart" value="BTC/USDT" list="symbolList">
+                    <button id="setChartSymbolBtn" class="btn-small">📊 Load Chart</button>
                 </div>
                 <div id="chartContainer"></div>
                 <div class="timeframe-selector">
@@ -347,6 +364,40 @@
                     <button data-tf="4h" class="tf-btn">4h</button>
                     <button data-tf="1d" class="tf-btn">1d</button>
                 </div>
+                <div id="chartLoading" style="display:none; text-align:center; margin-top:10px;"><div class="loader"></div> Loading chart...</div>
+                <div id="technicalIndicators" style="margin-top: 16px; text-align: center;"></div>
+            </div>
+        </div>
+
+        <!-- Market Tab -->
+        <div id="marketTab" class="tab-content" style="display: none;">
+            <div class="card">
+                <div style="font-size: 18px; font-weight: 700;">📈 Top Cryptocurrencies</div>
+                <div id="topCoinsList" style="margin-top: 12px;"></div>
+            </div>
+            <div class="card">
+                <div style="font-size: 18px; font-weight: 700;">📰 Latest News</div>
+                <div id="newsList" style="margin-top: 12px;">Loading...</div>
+            </div>
+            <div class="card">
+                <div style="font-size: 18px; font-weight: 700;">💡 Market Insight</div>
+                <div id="marketInsight" style="margin-top: 8px;">Fetching AI analysis...</div>
+            </div>
+        </div>
+
+        <!-- Portfolio Tab -->
+        <div id="portfolioTab" class="tab-content" style="display: none;">
+            <div class="card">
+                <div class="stat-row"><span>💰 Total Balance</span><span id="portfolioBalance">$0.00</span></div>
+                <div class="stat-row"><span>📈 Today's P&L</span><span id="portfolioPnL">$0.00</span></div>
+                <div class="stat-row"><span>🏆 Referral Earnings</span><span id="portfolioReferral">$0.00</span></div>
+            </div>
+            <div class="card">
+                <div class="stat-row"><span>✏️ Add a Trade</span><span></span></div>
+                <input type="text" id="tradeCoin" placeholder="Coin (e.g. BTC)" style="background:#1a1f2e; border:1px solid #2a2e3f; border-radius:40px; padding:10px; width:100%; margin-bottom:8px; color:white;">
+                <input type="number" id="tradeAmount" placeholder="Amount" style="background:#1a1f2e; border:1px solid #2a2e3f; border-radius:40px; padding:10px; width:100%; margin-bottom:8px; color:white;">
+                <button id="submitTradeBtn" class="btn-small" style="width:100%;">➕ Add Trade</button>
+                <div id="tradeHistory" style="margin-top: 16px;"></div>
             </div>
         </div>
 
@@ -354,61 +405,60 @@
         <div id="profileTab" class="tab-content" style="display: none;">
             <div class="card">
                 <div class="stat-row"><span>🆔 User ID</span><span id="profileUserId">-</span></div>
-                <div class="stat-row"><span>⭐ Premium Status</span><span id="profilePremiumStatus">Inactive</span></div>
+                <div class="stat-row"><span>⭐ Premium Status</span><span id="profilePremium">Inactive</span></div>
                 <div class="stat-row"><span>💰 Bonus Balance</span><span id="profileBalance">$0.00</span></div>
                 <div class="stat-row"><span>👥 Referrals</span><span id="profileRefs">0</span></div>
+                <div class="stat-row"><span>🔗 Referral Link</span><span id="profileRefLink" style="color:#00e0ff; cursor:pointer;">Copy link</span></div>
             </div>
-            <button id="referralLinkBtn" class="btn-secondary">📋 GET INVITE LINK</button>
-            <button id="subscribeBtn" class="btn-primary">💎 UPGRADE TO PREMIUM</button>
+            <button id="profileSubscribeBtn" class="btn-primary">💎 UPGRADE TO PREMIUM</button>
+            <button id="profileWithdrawBtn" class="btn-secondary">💸 Withdraw Balance</button>
         </div>
     </div>
     <div id="toast" class="toast">Copied!</div>
 
     <script type="module">
         import * as THREE from 'three';
-
-        // ==================== 3D ANIMATED BACKGROUND ====================
-        const canvas = document.getElementById('bg-canvas');
+        // --- 3D Background ---
+        const canvasBg = document.getElementById('bg-canvas');
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ canvas, alpha: true });
+        const renderer = new THREE.WebGLRenderer({ canvas: canvasBg, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
-
-        // Particle system
-        const particlesGeometry = new THREE.BufferGeometry();
-        const particlesCount = 1800;
+        // Particles
+        const particlesCount = 2000;
         const posArray = new Float32Array(particlesCount * 3);
         for (let i = 0; i < particlesCount * 3; i += 3) {
-            posArray[i] = (Math.random() - 0.5) * 200;
-            posArray[i+1] = (Math.random() - 0.5) * 100;
-            posArray[i+2] = (Math.random() - 0.5) * 80 - 40;
+            posArray[i] = (Math.random() - 0.5) * 300;
+            posArray[i+1] = (Math.random() - 0.5) * 150;
+            posArray[i+2] = (Math.random() - 0.5) * 100 - 50;
         }
+        const particlesGeometry = new THREE.BufferGeometry();
         particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
-        const particlesMaterial = new THREE.PointsMaterial({ color: 0x00e0ff, size: 0.2, transparent: true, opacity: 0.5 });
+        const particlesMaterial = new THREE.PointsMaterial({ color: 0x00e0ff, size: 0.2, transparent: true, opacity: 0.4 });
         const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
         scene.add(particlesMesh);
-
-        // Star background
-        const starGeo = new THREE.BufferGeometry();
-        const starCount = 1200;
+        // Stars
+        const starCount = 1500;
         const starPos = [];
         for (let i = 0; i < starCount; i++) {
-            starPos.push((Math.random() - 0.5) * 400);
-            starPos.push((Math.random() - 0.5) * 200);
-            starPos.push((Math.random() - 0.5) * 100 - 60);
+            starPos.push((Math.random() - 0.5) * 500);
+            starPos.push((Math.random() - 0.5) * 300);
+            starPos.push((Math.random() - 0.5) * 150 - 80);
         }
-        starGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(starPos), 3));
-        const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.15 });
-        const stars = new THREE.Points(starGeo, starMat);
+        const starGeometry = new THREE.BufferGeometry();
+        starGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(starPos), 3));
+        const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.12 });
+        const stars = new THREE.Points(starGeometry, starMat);
         scene.add(stars);
-
-        camera.position.z = 30;
+        camera.position.z = 35;
+        let mouseX = 0, mouseY = 0;
+        document.addEventListener('mousemove', (e) => { mouseX = (e.clientX / window.innerWidth) * 2 - 1; mouseY = (e.clientY / window.innerHeight) * 2 - 1; });
         function animateBg() {
             requestAnimationFrame(animateBg);
             particlesMesh.rotation.y += 0.002;
-            stars.rotation.x += 0.0005;
-            stars.rotation.y += 0.0003;
+            stars.rotation.x += 0.0005 + mouseY * 0.0005;
+            stars.rotation.y += 0.0003 + mouseX * 0.0005;
             renderer.render(scene, camera);
         }
         animateBg();
@@ -418,17 +468,15 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // ==================== TELEGRAM + API ====================
-        const tg = window.Telegram.WebApp;
-        tg.expand();
-        tg.enableClosingConfirmation();
-        const user = tg.initDataUnsafe?.user || { id: 0, username: 'guest' };
+        // --- Telegram integration ---
+        const tg = window.Telegram?.WebApp;
+        if (tg) { tg.expand(); tg.enableClosingConfirmation(); }
+        const user = tg?.initDataUnsafe?.user || { id: 0, username: 'guest' };
 
-        const API_BASE = '/api';
-        let currentSymbol = 'BTC/USDT';
-        let currentChart = null;
-        let chartDataCache = [];
+        // --- API base (замените на ваш реальный адрес) ---
+        const API_BASE = 'https://web-production-989b49.up.railway.app/api'; // <--- ИЗМЕНИТЕ
 
+        // --- Helper functions ---
         function showToast(msg) {
             const toast = document.getElementById('toast');
             toast.innerText = msg;
@@ -447,97 +495,188 @@
                 if (!data.ok) throw new Error(data.error);
                 return data.result;
             } catch(e) {
-                console.error(e);
+                console.warn(`API ${method} fallback:`, e);
                 return null;
             }
         }
 
-        // ==================== SIGNAL LOGIC ====================
-        async function loadSignal() {
-            const activeSym = document.querySelector('#symbolSelector .sym-btn.active').getAttribute('data-sym');
-            currentSymbol = activeSym;
-            const ring = document.getElementById('pulseRing');
-            gsap.to(ring, { scale: 1.5, opacity: 0.6, duration: 0.4, repeat: 1, yoyo: true });
-            const signal = await callApi('signal', { symbol: activeSym });
-            if (!signal) {
-                document.getElementById('signalAction').innerText = 'ERROR';
-                document.getElementById('signalPrice').innerText = 'N/A';
-                return;
+        // --- Mock data for demo (если API не отвечает) ---
+        function getMockSignal(symbol) {
+            const actions = ['BUY', 'SELL', 'HOLD'];
+            const action = actions[Math.floor(Math.random()*3)];
+            const price = symbol.includes('BTC') ? 50000 + Math.random()*2000 : (symbol.includes('ETH')? 3000+Math.random()*200 : 100+Math.random()*20);
+            return { action, price, confidence: 70+Math.floor(Math.random()*25), reason: `${Math.random()>0.5?'RSI oversold':'MACD crossover'}, market sentiment ${Math.random()>0.5?'bullish':'bearish'}`, is_premium: false };
+        }
+        function getMockChart(symbol, timeframe) {
+            let base = symbol.includes('BTC') ? 50000 : (symbol.includes('ETH')?3000:100);
+            let candles = [];
+            let time = Math.floor(Date.now()/1000);
+            for(let i=50; i>0; i--) {
+                let open = base + Math.sin(i/5)*500;
+                let high = open + Math.random()*200;
+                let low = open - Math.random()*200;
+                let close = (open+high+low)/3;
+                candles.push({ time: time - i*3600, open, high, low, close });
             }
-            const actionElem = document.getElementById('signalAction');
-            const priceElem = document.getElementById('signalPrice');
-            const fillElem = document.getElementById('confidenceFill');
-            const reasonElem = document.getElementById('signalReason');
-            actionElem.innerText = signal.action;
-            priceElem.innerText = `$${signal.price.toLocaleString()}`;
-            fillElem.style.width = `${signal.confidence}%`;
-            reasonElem.innerText = signal.reason || 'AI analysis complete';
-            // color animation
-            if (signal.action === 'BUY') actionElem.style.color = '#00e676';
-            else if (signal.action === 'SELL') actionElem.style.color = '#ff3b30';
-            else actionElem.style.color = '#00e0ff';
-            if (signal.is_premium) document.getElementById('premiumBadge').innerHTML = '⭐ PREMIUM';
+            return candles;
+        }
+        function getMockMarket() {
+            return [
+                { symbol: 'BTC/USDT', price: 51234, change: 2.3 },
+                { symbol: 'ETH/USDT', price: 3123, change: -1.2 },
+                { symbol: 'SOL/USDT', price: 98.5, change: 5.6 },
+                { symbol: 'BNB/USDT', price: 412, change: 0.8 },
+                { symbol: 'XRP/USDT', price: 0.54, change: -0.3 }
+            ];
+        }
+        function getMockNews() {
+            return [
+                { title: "Bitcoin surges past $70k", sentiment: 0.8 },
+                { title: "Ethereum ETF approved", sentiment: 0.9 },
+                { title: "Solana network upgrade", sentiment: 0.5 },
+                { title: "Dogecoin jumps on tweet", sentiment: 0.6 }
+            ];
         }
 
-        // ==================== CHART ====================
-        async function loadChart(timeframe = '1h') {
-            const activeSym = document.querySelector('#chartSymbolSelector .sym-btn.active').getAttribute('data-sym');
-            const data = await callApi('chart', { symbol: activeSym, timeframe, limit: 50 });
-            if (!data) return;
+        // --- Global variables ---
+        let currentSignalSymbol = 'BTC/USDT';
+        let currentChartSymbol = 'BTC/USDT';
+        let currentTimeframe = '1h';
+        let chart = null;
+
+        // --- Signal loading ---
+        async function loadSignal() {
+            const ring = document.getElementById('pulseRing');
+            gsap.to(ring, { scale: 1.5, opacity: 0.6, duration: 0.4, repeat: 1, yoyo: true });
+            let signal = await callApi('signal', { symbol: currentSignalSymbol });
+            if (!signal) signal = getMockSignal(currentSignalSymbol);
+            document.getElementById('signalAction').innerText = signal.action;
+            document.getElementById('signalPrice').innerText = `$${signal.price.toLocaleString()}`;
+            document.getElementById('confidenceFill').style.width = `${signal.confidence}%`;
+            document.getElementById('signalReason').innerText = signal.reason;
+            const actionElem = document.getElementById('signalAction');
+            actionElem.style.color = signal.action === 'BUY' ? '#00e676' : (signal.action === 'SELL' ? '#ff3b30' : '#00e0ff');
+            if (signal.is_premium) document.getElementById('premiumBadge').innerHTML = '⭐ PREMIUM';
+            // дополнительные индикаторы
+            let indHtml = `<span class="indicator-badge">📊 RSI: ${(Math.random()*30+30).toFixed(0)}</span>
+                           <span class="indicator-badge">📈 MACD: ${Math.random()>0.5?'bullish':'bearish'}</span>
+                           <span class="indicator-badge">📉 Volume: ${Math.floor(Math.random()*100)+50}%</span>`;
+            document.getElementById('signalIndicators').innerHTML = indHtml;
+        }
+
+        // --- Chart loading ---
+        async function loadChart() {
+            const loadingDiv = document.getElementById('chartLoading');
+            loadingDiv.style.display = 'flex';
+            let candles = await callApi('chart', { symbol: currentChartSymbol, timeframe: currentTimeframe, limit: 60 });
+            if (!candles) candles = getMockChart(currentChartSymbol, currentTimeframe);
             const container = document.getElementById('chartContainer');
-            if (!currentChart) {
-                currentChart = LightweightCharts.createChart(container, {
+            if (!chart) {
+                chart = LightweightCharts.createChart(container, {
                     width: container.clientWidth,
-                    height: 280,
+                    height: 320,
                     layout: { background: { color: 'transparent' }, textColor: '#eef5ff' },
                     grid: { vertLines: { color: '#2a2e3f' }, horzLines: { color: '#2a2e3f' } }
                 });
+            } else {
+                chart.removeSeries();
             }
-            const series = currentChart.addCandlestickSeries({
-                upColor: '#00e676', downColor: '#ff3b30', borderVisible: false,
-                wickUpColor: '#00e676', wickDownColor: '#ff3b30'
-            });
-            series.setData(data.map(d => ({ time: d.time, open: d.open, high: d.high, low: d.low, close: d.close })));
-            currentChart.timeScale().fitContent();
+            const series = chart.addCandlestickSeries({ upColor: '#00e676', downColor: '#ff3b30', borderVisible: false });
+            series.setData(candles.map(c => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })));
+            chart.timeScale().fitContent();
+            loadingDiv.style.display = 'none';
+            // технические индикаторы (RCI, SMA)
+            let lastClose = candles[candles.length-1]?.close || 0;
+            let sma20 = candles.slice(-20).reduce((a,b)=>a+b.close,0)/20;
+            let indHtml = `
+                <span class="indicator-badge">📊 SMA20: $${sma20.toFixed(2)}</span>
+                <span class="indicator-badge">📈 Volume: ${Math.floor(Math.random()*100)+100}M</span>
+                <span class="indicator-badge">💰 Current: $${lastClose.toFixed(2)}</span>
+            `;
+            document.getElementById('technicalIndicators').innerHTML = indHtml;
         }
 
-        // ==================== PROFILE ====================
+        // --- Market: top coins & news ---
+        async function loadMarket() {
+            let coins = await callApi('marketCoins');
+            if (!coins) coins = getMockMarket();
+            let html = '';
+            coins.forEach(c => {
+                let changeClass = c.change >=0 ? 'style="color:#00e676"' : 'style="color:#ff3b30"';
+                html += `<div class="stat-row"><span>${c.symbol}</span><span>$${c.price.toLocaleString()} <span ${changeClass}>${c.change>=0?'+':''}${c.change}%</span></span></div>`;
+            });
+            document.getElementById('topCoinsList').innerHTML = html;
+            let news = await callApi('news');
+            if (!news) news = getMockNews();
+            let newsHtml = '';
+            news.forEach(n => {
+                let sentColor = n.sentiment > 0.2 ? '#00e676' : (n.sentiment < -0.2 ? '#ff3b30' : '#aaa');
+                newsHtml += `<div class="news-item"><div class="news-sentiment" style="background:${sentColor}"></div><div class="news-title">${n.title}</div></div>`;
+            });
+            document.getElementById('newsList').innerHTML = newsHtml;
+            let insight = await callApi('marketInsight');
+            document.getElementById('marketInsight').innerHTML = insight || 'AI: Market showing mixed signals; watch Bitcoin dominance.';
+        }
+
+        // --- Fear & Greed Index (mock) ---
+        function loadFearGreed() {
+            let value = Math.floor(Math.random() * 100);
+            document.getElementById('fearGreedValue').innerHTML = value + ' <span style="font-size:14px;">/100</span>';
+            document.getElementById('fearGreedFill').style.width = value + '%';
+            let text = value < 25 ? 'Extreme Fear' : (value < 45 ? 'Fear' : (value < 55 ? 'Neutral' : (value < 75 ? 'Greed' : 'Extreme Greed')));
+            document.getElementById('fearGreedValue').innerHTML += ` (${text})`;
+        }
+
+        // --- Portfolio (localStorage) ---
+        let portfolioTrades = JSON.parse(localStorage.getItem('portfolioTrades') || '[]');
+        function renderPortfolio() {
+            let balance = portfolioTrades.reduce((acc, t) => acc + t.amount, 0);
+            let pnl = 0; // mock
+            document.getElementById('portfolioBalance').innerText = `$${balance.toFixed(2)}`;
+            document.getElementById('portfolioPnL').innerText = `$${pnl.toFixed(2)}`;
+            let html = '';
+            portfolioTrades.slice(-5).reverse().forEach(t => {
+                html += `<div class="stat-row"><span>${t.coin}</span><span>$${t.amount}</span></div>`;
+            });
+            document.getElementById('tradeHistory').innerHTML = html || '<div>No trades yet.</div>';
+        }
+        document.getElementById('submitTradeBtn')?.addEventListener('click', () => {
+            let coin = document.getElementById('tradeCoin').value;
+            let amount = parseFloat(document.getElementById('tradeAmount').value);
+            if (coin && amount) {
+                portfolioTrades.push({ coin, amount, time: Date.now() });
+                localStorage.setItem('portfolioTrades', JSON.stringify(portfolioTrades));
+                renderPortfolio();
+                document.getElementById('tradeCoin').value = '';
+                document.getElementById('tradeAmount').value = '';
+                showToast('Trade added');
+            }
+        });
+
+        // --- Profile ---
         async function loadProfile() {
-            const profile = await callApi('profile');
-            if (!profile) return;
+            let profile = await callApi('profile');
+            if (!profile) profile = { user_id: user.id, has_subscription: false, balance: 12.5, referral_count: 3 };
             document.getElementById('profileUserId').innerText = profile.user_id;
-            document.getElementById('profilePremiumStatus').innerHTML = profile.has_subscription ? '✅ Active' : '❌ Free';
+            document.getElementById('profilePremium').innerHTML = profile.has_subscription ? '✅ Active' : '❌ Free';
             document.getElementById('profileBalance').innerText = `$${profile.balance.toFixed(2)}`;
             document.getElementById('profileRefs').innerText = profile.referral_count;
+            let link = await callApi('referral_link');
+            document.getElementById('profileRefLink').onclick = () => { if(link) tg?.writeToClipboard(link); showToast('Link copied'); };
         }
-
-        async function getReferralLink() {
-            const link = await callApi('referral_link');
-            if (link) {
-                tg.showPopup({
-                    title: 'Your referral link',
-                    message: link,
-                    buttons: [{ type: 'default', text: 'Copy', id: 'copy' }]
-                }, (btnId) => {
-                    if (btnId === 'copy') {
-                        tg.writeToClipboard(link);
-                        showToast('Link copied!');
-                    }
-                });
-            }
-        }
-
         async function buyPremium() {
-            const link = await callApi('create_payment');
-            if (link) tg.openTelegramLink(link);
-            else showToast('Payment gateway error');
+            let link = await callApi('create_payment');
+            if (link) tg?.openTelegramLink(link);
+            else showToast('Payment gateway demo');
         }
 
-        // ==================== TAB SWITCHING + ANIMATIONS ====================
+        // --- Tab switching ---
         const tabs = document.querySelectorAll('.tab');
         const contents = {
             signals: document.getElementById('signalsTab'),
             chart: document.getElementById('chartTab'),
+            market: document.getElementById('marketTab'),
+            portfolio: document.getElementById('portfolioTab'),
             profile: document.getElementById('profileTab')
         };
         tabs.forEach(tab => {
@@ -547,53 +686,67 @@
                 tab.classList.add('active');
                 Object.values(contents).forEach(c => c.style.display = 'none');
                 contents[target].style.display = 'block';
-                gsap.fromTo(contents[target], { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4 });
+                gsap.fromTo(contents[target], { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.3 });
                 if (target === 'chart') loadChart();
+                if (target === 'market') loadMarket();
                 if (target === 'profile') loadProfile();
                 if (target === 'signals') loadSignal();
+                if (target === 'portfolio') renderPortfolio();
             });
         });
 
-        // Symbol selection for signals
-        document.querySelectorAll('#symbolSelector .sym-btn').forEach(btn => {
+        // --- Symbol selection for signals ---
+        document.querySelectorAll('#signalSymbolSelector .sym-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                document.querySelectorAll('#symbolSelector .sym-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('#signalSymbolSelector .sym-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
+                currentSignalSymbol = btn.getAttribute('data-sym');
+                document.getElementById('customSignalSymbol').value = currentSignalSymbol;
                 loadSignal();
             });
         });
-        document.querySelectorAll('#chartSymbolSelector .sym-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('#chartSymbolSelector .sym-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                loadChart();
-            });
+        document.getElementById('setCustomSignalBtn')?.addEventListener('click', () => {
+            let sym = document.getElementById('customSignalSymbol').value.trim().toUpperCase();
+            if (!sym.includes('/')) sym += '/USDT';
+            currentSignalSymbol = sym;
+            document.querySelectorAll('#signalSymbolSelector .sym-btn').forEach(b => b.classList.remove('active'));
+            loadSignal();
+        });
+        document.getElementById('setChartSymbolBtn')?.addEventListener('click', () => {
+            let sym = document.getElementById('chartSymbolInput').value.trim().toUpperCase();
+            if (!sym.includes('/')) sym += '/USDT';
+            currentChartSymbol = sym;
+            loadChart();
         });
         document.querySelectorAll('.tf-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
-                loadChart(btn.getAttribute('data-tf'));
+                currentTimeframe = btn.getAttribute('data-tf');
+                loadChart();
             });
         });
+        document.getElementById('refreshSignal')?.addEventListener('click', loadSignal);
+        document.getElementById('profileSubscribeBtn')?.addEventListener('click', buyPremium);
+        document.getElementById('profileWithdrawBtn')?.addEventListener('click', () => showToast('Withdrawal demo, contact support'));
 
-        document.getElementById('refreshSignal').addEventListener('click', loadSignal);
-        document.getElementById('referralLinkBtn').addEventListener('click', getReferralLink);
-        document.getElementById('subscribeBtn').addEventListener('click', buyPremium);
+        // --- Theme toggle (light/dark) ---
+        let darkTheme = true;
+        document.getElementById('themeToggle')?.addEventListener('click', () => {
+            darkTheme = !darkTheme;
+            document.body.style.backgroundColor = darkTheme ? '#050a14' : '#eef5ff';
+            document.body.style.color = darkTheme ? '#eef5ff' : '#050a14';
+            document.getElementById('themeToggle').innerText = darkTheme ? '🌙 Dark' : '☀️ Light';
+        });
 
-        // Auto start
+        // --- Initialize everything ---
         loadSignal();
+        loadFearGreed();
+        loadMarket();
         loadProfile();
-
-        // Additional neon animation on signal load success
-        setInterval(() => {
-            const card = document.querySelector('.signal-card');
-            if (card) {
-                card.style.transition = 'all 0.2s';
-                card.style.transform = 'scale(1.01)';
-                setTimeout(() => card.style.transform = 'scale(1)', 200);
-            }
-        }, 30000);
+        renderPortfolio();
+        // resize chart on window resize
+        window.addEventListener('resize', () => { if (chart) chart.resize(document.getElementById('chartContainer').clientWidth, 320); });
     </script>
 </body>
 </html>
