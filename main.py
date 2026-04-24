@@ -67,7 +67,7 @@ async def set_bot_commands(bot_instance: Bot):
 # Startup and shutdown events
 # ===================================================================
 
-async def on_startup(bot_instance: Bot):
+async def on_startup(bot: Bot):
     """Actions to perform when bot starts"""
     logger.info("Bot is starting up...")
     
@@ -95,7 +95,7 @@ async def on_startup(bot_instance: Bot):
     logger.info("Background scheduler started")
     
     # Set bot commands
-    await set_bot_commands(bot_instance)
+    await set_bot_commands(bot)
     
     # Log startup completion
     logger.info("Bot started successfully")
@@ -103,7 +103,7 @@ async def on_startup(bot_instance: Bot):
     # Notify admins
     for admin_id in cfg.ADMIN_IDS:
         try:
-            await bot_instance.send_message(
+            await bot.send_message(
                 admin_id,
                 f"🤖 *CryptoPulse AI Bot Started*\n"
                 f"Time: {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
@@ -113,7 +113,7 @@ async def on_startup(bot_instance: Bot):
         except Exception as e:
             logger.warning(f"Failed to notify admin {admin_id}: {e}")
 
-async def on_shutdown(bot_instance: Bot):
+async def on_shutdown(bot: Bot):
     """Actions to perform when bot stops"""
     logger.info("Bot is shutting down...")
     
@@ -125,13 +125,13 @@ async def on_shutdown(bot_instance: Bot):
     # Database module uses context managers, no explicit close needed
     
     # Close bot session
-    await bot_instance.session.close()
+    await bot.session.close()
     logger.info("Bot session closed")
     
     # Notify admins
     for admin_id in cfg.ADMIN_IDS:
         try:
-            await bot_instance.send_message(
+            await bot.send_message(
                 admin_id,
                 f"🛑 *CryptoPulse AI Bot Stopped*\n"
                 f"Time: {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
