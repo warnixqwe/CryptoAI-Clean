@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>CryptoPulse AI — Ultimate Terminal</title>
+    <!-- Telegram WebApp SDK -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Lightweight Charts (TradingView) -->
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.js"></script>
+    <!-- Three.js для 3D фона -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.128.0/build/three.module.js"
+            }
+        }
+    </script>
+    <!-- Font Awesome 6 (free icons) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+            background: #050a14;
+            color: #eef5ff;
+            overflow-x: hidden;
+            padding: 0;
+            margin: 0;
+            position: relative;
+            min-height: 100vh;
+        }
+
+        /* 3D canvas background */
+        #canvas-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+            opacity: 0.6;
+        }
+
+        /* Main content overlay */
+        .app-container {
+            position: relative;
+            z-index: 2;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 16px 16px 80px 16px;
+        }
+
+        /* Glassmorphic cards */
+        .card {
+            background: rgba(18, 25, 45, 0.75);
+            backdrop-filter: blur(12px);
+            border-radius: 32px;
+            padding: 20px;
+            margin-bottom: 18px;
+            border: 1px solid rgba(0, 224, 255, 0.25);
+            transition: all 0.25s ease;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+        }
+        .card:hover {
+            border-color: #00e0ff;
+            box-shadow: 0 0 18px rgba(0,224,255,0.3);
+        }
+
+        /* Neon header */
+        .neon {
+            text-shadow: 0 0 5px #0ff, 0 0 10px #0ff;
+        }
+        h1 {
+            font-size: 26px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff, #00e0ff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        /* Navigation bar */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(10, 18, 30, 0.95);
+            backdrop-filter: blur(20px);
+            display: flex;
+            justify-content: space-around;
+            padding: 12px 16px 20px;
+            border-top: 1px solid rgba(0,224,255,0.3);
+            z-index: 10;
+        }
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            background: none;
+            border: none;
+            color: #8e9aaf;
+            font-size: 12px;
+            transition: 0.2s;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .nav-item i {
+            font-size: 24px;
+        }
+        .nav-item.active {
+            color: #00e0ff;
+            text-shadow: 0 0 5px #0ff;
+        }
+
+        /* price ticker */
+        .price-big {
+            font-size: 34px;
+            font-weight: 800;
+            font-family: monospace;
+            letter-spacing: 1px;
+        }
+        .change-positive { color: #00e676; }
+        .change-negative { color: #ff3b30; }
+
+        /* Signal animation */
+        .pulse-ring {
+            width: 80px;
+            height: 80px;
+            background: radial-gradient(circle, rgba(0,224,255,0.4) 0%, rgba(0,224,255,0) 70%);
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.8); opacity: 0.6; }
+            100% { transform: scale(1.4); opacity: 0; }
+        }
+
+        .signal-action {
+            font-size: 48px;
+            font-weight: 900;
+            letter-spacing: 4px;
+        }
+        .btn-glow {
+            background: linear-gradient(90deg, #00c6ff, #0072ff);
+            border: none;
+            padding: 14px 20px;
+            border-radius: 40px;
+            color: white;
+            font-weight: bold;
+            width: 100%;
+            cursor: pointer;
+            transition: 0.3s;
+            margin-top: 12px;
+        }
+        .btn-glow:hover {
+            transform: scale(1.01);
+            box-shadow: 0 0 15px #0072ff;
+        }
+
+        /* page visibility */
+        .page {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+        .page.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px);}
+            to { opacity: 1; transform: translateY(0);}
+        }
+
+        /* coin chips */
+        .coin-chip {
+            background: rgba(0,224,255,0.15);
+            padding: 6px 14px;
+            border-radius: 40px;
+            font-size: 14px;
+            display: inline-block;
+            margin: 4px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .coin-chip.active {
+            background: #00e0ff;
+            color: #050a14;
+            font-weight: bold;
+        }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        canvas {
+            width: 100%;
+            height: 250px;
+        }
+        .news-item {
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .news-title {
+            font-weight: 600;
+        }
+        .small-text {
+            font-size: 11px;
+            color: #8e9aaf;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas-bg"></canvas>
+    <div class="app-container">
+        <!-- Header with logo and premium badge -->
+        <div class="card" style="margin-bottom: 12px; text-align: center;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h1><i class="fas fa-chart-line"></i> CryptoPulse AI</h1>
+                <span class="badge" id="premiumBadge">FREE</span>
+            </div>
+            <div style="font-size: 13px; margin-top: 6px;">Ultimate Trading Terminal</div>
+        </div>
+
+        <!-- Dashboard Page (Home) -->
+        <div id="page-dashboard" class="page active">
+            <div class="card">
+                <div style="display: flex; justify-content: space-between;">
+                    <span><i class="fas fa-coins"></i> BTC/USDT</span>
+                    <span id="btc-change" class="change-positive">+0.0%</span>
+                </div>
+                <div class="price-big" id="btc-price">$0.00</div>
+                <div class="small-text">24h Volume: <span id="btc-volume">-</span></div>
+            </div>
+            <div class="card">
+                <div style="display: flex; justify-content: space-between;">
+                    <span><i class="fab fa-ethereum"></i> ETH/USDT</span>
+                    <span id="eth-change">0.0%</span>
+                </div>
+                <div class="price-big" id="eth-price">$0.00</div>
+            </div>
+            <div class="card">
+                <div style="text-align: center;">
+                    <div class="small-text">Market Sentiment</div>
+                    <div style="font-size: 28px; font-weight: bold;" id="market-sentiment">🟡 NEUTRAL</div>
+                    <div class="small-text">Based on AI + News</div>
+                </div>
+            </div>
+            <div class="card">
+                <div style="display: flex; justify-content: space-between;">
+                    <span><i class="fas fa-users"></i> Active Users</span>
+                    <span id="active-users">-</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-top: 8px;">
+                    <span><i class="fas fa-chart-simple"></i> Total Signals</span>
+                    <span id="total-signals">-</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Page -->
+        <div id="page-charts" class="page">
+            <div class="card">
+                <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;" id="chart-symbols">
+                    <span class="coin-chip active" data-sym="BTC/USDT">BTC</span>
+                    <span class="coin-chip" data-sym="ETH/USDT">ETH</span>
+                    <span class="coin-chip" data-sym="SOL/USDT">SOL</span>
+                    <span class="coin-chip" data-sym="BNB/USDT">BNB</span>
+                </div>
+                <div id="chart-container" style="height: 280px;"></div>
+                <div class="small-text" style="text-align: center; margin-top: 8px;">1h timeframe | Live data</div>
+            </div>
+        </div>
+
+        <!-- AI Signals Page -->
+        <div id="page-signals" class="page">
+            <div class="card">
+                <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;" id="signal-symbols">
+                    <span class="coin-chip active" data-sym="BTC/USDT">BTC</span>
+                    <span class="coin-chip" data-sym="ETH/USDT">ETH</span>
+                    <span class="coin-chip" data-sym="SOL/USDT">SOL</span>
+                </div>
+                <div id="signal-box" class="signal-box" style="text-align: center;">
+                    <div class="pulse-ring" style="margin: 0 auto 10px;"></div>
+                    <div class="signal-action" id="signal-action">LOADING</div>
+                    <div class="price-big" id="signal-price">$0.00</div>
+                    <div>Confidence: <span id="signal-confidence">0%</span></div>
+                    <div class="small-text" id="signal-reason">Fetching AI analysis...</div>
+                </div>
+                <button class="btn-glow" id="refresh-signal"><i class="fas fa-sync-alt"></i> Refresh Signal</button>
+            </div>
+            <div class="card">
+                <div><i class="fas fa-info-circle"></i> How it works</div>
+                <div class="small-text">AI analyzes news + technical indicators (RSI, MACD). Premium users get unlimited signals.</div>
+            </div>
+        </div>
+
+        <!-- Portfolio Page -->
+        <div id="page-portfolio" class="page">
+            <div class="card">
+                <div class="stat-row"><span>💰 Total Balance</span><span id="portfolio-balance">$0.00</span></div>
+                <div class="stat-row"><span>📈 Today P&L</span><span id="portfolio-pl">$0.00</span></div>
+                <div class="stat-row"><span>🏆 Referral Earnings</span><span id="portfolio-ref">$0.00</span></div>
+            </div>
+            <div class="card">
+                <div style="font-weight: bold;">📊 Your Holdings</div>
+                <div id="holdings-list">No assets added. Use /deposit in bot.</div>
+            </div>
+            <button class="btn-glow" id="buy-premium-portfolio"><i class="fas fa-crown"></i> Upgrade to Premium</button>
+        </div>
+
+        <!-- News Page -->
+        <div id="page-news" class="page">
+            <div class="card">
+                <div style="display: flex; justify-content: space-between;">
+                    <span><i class="fas fa-newspaper"></i> Latest Crypto News</span>
+                    <i class="fas fa-robot" style="color:#0ff;"></i>
+                </div>
+                <div id="news-list">Loading latest news...</div>
+            </div>
+        </div>
+
+        <!-- Profile Page -->
+        <div id="page-profile" class="page">
+            <div class="card">
+                <div class="stat-row"><span>🆔 User ID</span><span id="profile-userid">-</span></div>
+                <div class="stat-row"><span>👤 Username</span><span id="profile-username">-</span></div>
+                <div class="stat-row"><span>⭐ Premium</span><span id="profile-premium-status">Inactive</span></div>
+                <div class="stat-row"><span>📅 Expires</span><span id="profile-expiry">-</span></div>
+                <div class="stat-row"><span>🎁 Referral Link</span><span id="profile-reflink" style="color:#0ff;">Tap to copy</span></div>
+            </div>
+            <button class="btn-glow" id="profile-subscribe"><i class="fas fa-gem"></i> Get Premium</button>
+            <button class="btn-glow" style="background:#333;" id="logout-btn"><i class="fas fa-sign-out-alt"></i> Close App</button>
+        </div>
+    </div>
+
+    <!-- Bottom Navigation -->
+    <div class="bottom-nav">
+        <button class="nav-item active" data-page="dashboard"><i class="fas fa-home"></i><span>Home</span></button>
+        <button class="nav-item" data-page="charts"><i class="fas fa-chart-line"></i><span>Charts</span></button>
+        <button class="nav-item" data-page="signals"><i class="fas fa-bolt"></i><span>Signals</span></button>
+        <button class="nav-item" data-page="portfolio"><i class="fas fa-wallet"></i><span>Portfolio</span></button>
+        <button class="nav-item" data-page="news"><i class="fas fa-newspaper"></i><span>News</span></button>
+        <button class="nav-item" data-page="profile"><i class="fas fa-user"></i><span>Profile</span></button>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // ---- 3D BACKGROUND ----
+        const canvasBg = document.getElementById('canvas-bg');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: canvasBg, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        
+        // particles
+        const geometry = new THREE.BufferGeometry();
+        const particlesCount = 1000;
+        const posArray = new Float32Array(particlesCount * 3);
+        for(let i = 0; i < particlesCount * 3; i += 3) {
+            posArray[i] = (Math.random() - 0.5) * 200;
+            posArray[i+1] = (Math.random() - 0.5) * 100;
+            posArray[i+2] = (Math.random() - 0.5) * 80 - 40;
+        }
+        geometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        const material = new THREE.PointsMaterial({ color: 0x00e0ff, size: 0.2, transparent: true, opacity: 0.5 });
+        const particles = new THREE.Points(geometry, material);
+        scene.add(particles);
+        
+        const starGeometry = new THREE.BufferGeometry();
+        const starCount = 800;
+        const starPos = [];
+        for(let i=0;i<starCount;i++) {
+            starPos.push((Math.random()-0.5)*400);
+            starPos.push((Math.random()-0.5)*200);
+            starPos.push((Math.random()-0.5)*100 - 50);
+        }
+        starGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(starPos), 3));
+        const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.15 });
+        const stars = new THREE.Points(starGeometry, starMat);
+        scene.add(stars);
+        
+        camera.position.z = 30;
+        
+        function animateBg() {
+            requestAnimationFrame(animateBg);
+            particles.rotation.y += 0.002;
+            stars.rotation.x += 0.0005;
+            stars.rotation.y += 0.0003;
+            renderer.render(scene, camera);
+        }
+        animateBg();
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // ---- TELEGRAM INTEGRATION ----
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.enableClosingConfirmation();
+        const user = tg.initDataUnsafe?.user || { id: 123456, username: 'cryptofan', first_name: 'User' };
+        
+        // ---- GLOBAL STATE ----
+        let currentChart = null;
+        let currentChartSymbol = 'BTC/USDT';
+        let userPremium = false;
+        let userBalance = 0;
+        
+        // Helper: call bot backend API (uses fetch to your bot's domain, adjust URL)
+        // In real deployment, replace with your actual backend endpoint.
+        const API_BASE = '';  // if empty, use relative path. Ensure you proxy requests or set CORS.
+        async function callApi(method, params = {}) {
+            const response = await fetch('/api/webapp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ method, params, user_id: user.id })
+            });
+            const data = await response.json();
+            if (!data.ok) throw new Error(data.error);
+            return data.result;
+        }
+        
+        // mock fallback (for demo without backend)
+        async function apiMock(method, params) {
+            console.log('API mock:', method, params);
+            if (method === 'getMarketData') {
+                return { btc: { price: 65432, change: 2.3, volume: '24.5B' }, eth: { price: 3456, change: 1.2 } };
+            }
+            if (method === 'getSignal') {
+                return { action: 'BUY', price: 65400, confidence: 87, reasoning: 'RSI oversold + positive news', is_premium: userPremium };
+            }
+            if (method === 'getChartData') {
+                const arr = [];
+                for(let i=0;i<50;i++) arr.push({ time: Math.floor(Date.now()/1000)-i*3600, value: 60000 + Math.sin(i)*2000 });
+                return arr;
+            }
+            if (method === 'getPortfolio') {
+                return { balance: 1250.5, pnl: 45.2, referral_earnings: 120, holdings: [{ coin: 'BTC', amount: 0.012 }] };
+            }
+            if (method === 'getNews') {
+                return [{ title: 'Bitcoin ETF inflows surge', source: 'CoinDesk', time: '2h ago' }, { title: 'Ethereum upgrade successful', source: 'CoinTelegraph' }];
+            }
+            if (method === 'getProfile') {
+                return { id: user.id, username: user.username, premium: userPremium, expiry: '2025-01-01', ref_link: 'https://t.me/xxx?start=ref' };
+            }
+            if (method === 'getStats') {
+                return { active_users: 12543, total_signals: 89200 };
+            }
+            return {};
+        }
+        
+        // Use real API if available, else mock
+        const api = (typeof callApi === 'function' && API_BASE) ? callApi : apiMock;
+        
+        // ---- PAGE NAVIGATION ----
+        const pages = ['dashboard', 'charts', 'signals', 'portfolio', 'news', 'profile'];
+        document.querySelectorAll('.nav-item').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const pageId = btn.getAttribute('data-page');
+                document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                document.getElementById(`page-${pageId}`).classList.add('active');
+                if (pageId === 'charts') loadChartData();
+                if (pageId === 'signals') loadSignal();
+                if (pageId === 'portfolio') loadPortfolio();
+                if (pageId === 'news') loadNews();
+                if (pageId === 'profile') loadProfile();
+            });
+        });
+        
+        // ---- DASHBOARD ----
+        async function loadDashboard() {
+            try {
+                const data = await api('getMarketData');
+                document.getElementById('btc-price').innerText = `$${data.btc.price.toLocaleString()}`;
+                document.getElementById('btc-change').innerHTML = `${data.btc.change>0?'+':''}${data.btc.change}%`;
+                document.getElementById('btc-volume').innerText = data.btc.volume;
+                document.getElementById('eth-price').innerText = `$${data.eth.price.toLocaleString()}`;
+                document.getElementById('eth-change').innerHTML = `${data.eth.change>0?'+':''}${data.eth.change}%`;
+                // market sentiment mock
+                const sent = data.btc.change > 1 ? '🟢 BULLISH' : (data.btc.change < -1 ? '🔴 BEARISH' : '🟡 NEUTRAL');
+                document.getElementById('market-sentiment').innerHTML = sent;
+                const stats = await api('getStats');
+                document.getElementById('active-users').innerText = stats.active_users;
+                document.getElementById('total-signals').innerText = stats.total_signals;
+            } catch(e) { console.error(e); }
+        }
+        
+        // ---- CHARTS (Lightweight Charts) ----
+        async function loadChartData() {
+            const container = document.getElementById('chart-container');
+            if (!currentChart) {
+                currentChart = LightweightCharts.createChart(container, { width: container.clientWidth, height: 280, layout: { textColor: '#eef5ff', background: { color: 'transparent' } }, grid: { vertLines: { color: '#2a2e3f' }, horzLines: { color: '#2a2e3f' } } });
+            }
+            try {
+                const data = await api('getChartData', { symbol: currentChartSymbol });
+                const series = currentChart.addCandlestickSeries({ upColor: '#00e676', downColor: '#ff3b30', borderVisible: false, wickUpColor: '#00e676', wickDownColor: '#ff3b30' });
+                series.setData(data.map(d => ({ time: d.time, open: d.value*0.99, high: d.value*1.01, low: d.value*0.98, close: d.value })));
+            } catch(e) { console.log(e); }
+        }
+        
+        document.querySelectorAll('#chart-symbols .coin-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                document.querySelectorAll('#chart-symbols .coin-chip').forEach(c => c.classList.remove('active'));
+                chip.classList.add('active');
+                currentChartSymbol = chip.getAttribute('data-sym');
+                loadChartData();
+            });
+        });
+        
+        // ---- SIGNALS ----
+        async function loadSignal() {
+            const activeSym = document.querySelector('#signal-symbols .coin-chip.active').getAttribute('data-sym');
+            try {
+                const sig = await api('getSignal', { symbol: activeSym });
+                document.getElementById('signal-action').innerHTML = sig.action;
+                document.getElementById('signal-price').innerHTML = `$${sig.price.toLocaleString()}`;
+                document.getElementById('signal-confidence').innerHTML = `${sig.confidence}%`;
+                document.getElementById('signal-reason').innerHTML = sig.reasoning;
+                if (sig.is_premium) {
+                    document.getElementById('premiumBadge').innerHTML = '⭐ PREMIUM';
+                    userPremium = true;
+                } else {
+                    document.getElementById('premiumBadge').innerHTML = 'FREE';
+                }
+            } catch(e) { console.log(e); }
+        }
+        document.querySelectorAll('#signal-symbols .coin-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                document.querySelectorAll('#signal-symbols .coin-chip').forEach(c => c.classList.remove('active'));
+                chip.classList.add('active');
+                loadSignal();
+            });
+        });
+        document.getElementById('refresh-signal')?.addEventListener('click', loadSignal);
+        
+        // ---- PORTFOLIO ----
+        async function loadPortfolio() {
+            try {
+                const pf = await api('getPortfolio');
+                document.getElementById('portfolio-balance').innerText = `$${pf.balance.toFixed(2)}`;
+                document.getElementById('portfolio-pl').innerText = `${pf.pnl>=0?'+':''}$${pf.pnl.toFixed(2)}`;
+                document.getElementById('portfolio-ref').innerText = `$${pf.referral_earnings.toFixed(2)}`;
+                let html = '';
+                pf.holdings.forEach(h => { html += `<div class="stat-row"><span>${h.coin}</span><span>${h.amount}</span></div>`; });
+                document.getElementById('holdings-list').innerHTML = html || 'No assets';
+            } catch(e) { console.log(e); }
+        }
+        
+        // ---- NEWS ----
+        async function loadNews() {
+            try {
+                const news = await api('getNews');
+                let html = '';
+                news.forEach(n => {
+                    html += `<div class="news-item"><div class="news-title">📰 ${n.title}</div><div class="small-text">${n.source} · ${n.time}</div></div>`;
+                });
+                document.getElementById('news-list').innerHTML = html || 'No news';
+            } catch(e) { console.log(e); }
+        }
+        
+        // ---- PROFILE ----
+        async function loadProfile() {
+            try {
+                const prof = await api('getProfile');
+                document.getElementById('profile-userid').innerText = prof.id;
+                document.getElementById('profile-username').innerText = prof.username;
+                document.getElementById('profile-premium-status').innerHTML = prof.premium ? '✅ Active' : '❌ Free';
+                document.getElementById('profile-expiry').innerText = prof.expiry || 'Never';
+                document.getElementById('profile-reflink').innerText = '📋 Tap to copy';
+                window.refLink = prof.ref_link;
+            } catch(e) { console.log(e); }
+        }
+        document.getElementById('profile-reflink')?.addEventListener('click', () => {
+            if(window.refLink) tg.writeToClipboard(window.refLink);
+            tg.showAlert('Referral link copied!');
+        });
+        document.getElementById('profile-subscribe')?.addEventListener('click', async () => {
+            const link = await api('createPaymentLink');
+            if(link) tg.openTelegramLink(link);
+        });
+        document.getElementById('logout-btn')?.addEventListener('click', () => tg.close());
+        document.getElementById('buy-premium-portfolio')?.addEventListener('click', async () => {
+            const link = await api('createPaymentLink');
+            if(link) tg.openTelegramLink(link);
+        });
+        
+        // ---- INIT ALL ----
+        function init() {
+            loadDashboard();
+            loadSignal();
+            loadPortfolio();
+            loadNews();
+            loadProfile();
+            setInterval(() => { if(document.getElementById('page-dashboard').classList.contains('active')) loadDashboard(); }, 30000);
+            setInterval(() => { if(document.getElementById('page-signals').classList.contains('active')) loadSignal(); }, 20000);
+        }
+        init();
+    </script>
+</body>
+</html>
