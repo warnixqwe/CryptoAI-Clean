@@ -1,17 +1,10 @@
-import asyncio
 import logging
-import time
-import json
-import random
-from typing import Dict, List, Optional, Tuple, Any
-from datetime import datetime
-from collections import deque
-import threading
+from typing import Optional
 
-# Import configuration
-from config import get_config
+_logger = logging.getLogger(__name__)
+_market_provider = None
 
-# В самом верху market_data.py (после импортов)
+# В самом верху market_data.py, перед классом MarketDataProvider
 import logging
 from typing import Optional
 
@@ -19,7 +12,6 @@ _logger = logging.getLogger(__name__)
 _market_provider = None
 
 def get_market_provider():
-    """Ленивая инициализация MarketDataProvider"""
     global _market_provider
     if _market_provider is None:
         try:
@@ -30,4 +22,10 @@ def get_market_provider():
             _market_provider = None
     return _market_provider
 
-# А в классе MarketDataProvider все методы должны корректно обрабатывать None и возвращать мок-данные.
+def get_market_provider():
+    global _market_provider
+    if _market_provider is None:
+        try:
+            from market_data import MarketDataProvider
+            _market_provider = MarketDataProvider()
+        __all__ = ["MarketDataProvider", "get_market_provider"]

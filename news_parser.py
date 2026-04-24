@@ -17,6 +17,11 @@ from config import get_config
 
 _news_aggregator = None
 
+import logging
+from typing import Optional
+
+_news_aggregator = None
+
 def get_news_aggregator():
     global _news_aggregator
     if _news_aggregator is None:
@@ -27,3 +32,11 @@ def get_news_aggregator():
             logging.error(f"NewsAggregator init failed: {e}")
             _news_aggregator = None
     return _news_aggregator
+
+def get_news_aggregator():
+    global _news_aggregator
+    if _news_aggregator is None:
+        try:
+            from news_parser import NewsAggregator
+            _news_aggregator = NewsAggregator()
+        __all__ = ["NewsAggregator", "get_news_aggregator"]
