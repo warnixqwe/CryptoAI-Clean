@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 """
 ╔═════════════════════════════════════════════════════════════════════════════╗
-║                         CRYPTOPULSE AI ULTIMATE                             ║
+║                         SynthraCrypto ULTIMATE                              ║
 ║                      Самый мощный телеграм-бот для криптосигналов           ║
-║                      Версия 4.2.0 | Автор: CryptoPulse Team                 ║
+║                      Версия 1.0.0 | Автор: SynthraCrypto Team               ║
 ╚═════════════════════════════════════════════════════════════════════════════╝
 
 Этот бот содержит полную экосистему для заработка на криптосигналах:
@@ -26,7 +26,7 @@
 
 import asyncio
 import logging
-import logging.handlers   # <-- ДОБАВИТЬ
+import logging.handlers
 import sqlite3
 import json
 import time
@@ -440,6 +440,43 @@ class Database:
             c.execute("UPDATE users SET subscribed=0 WHERE subscribed=1 AND subscribe_until < ?", (now,))
             return c.rowcount
 
+    def add_fake_signals(self, user_id: int, count: int, action: str = "free_signal") -> int:
+     """Добавляет указанное количество фейковых сигналов в лог действий."""
+    with self._cursor() as c:
+        now = int(time.time())
+        inserted = 0
+        for _ in range(count):
+            c.execute(
+                "INSERT INTO actions (user_id, action, details, timestamp) VALUES (?, ?, ?, ?)",
+                (user_id, action, f"admin_nakrutka", now)
+            )
+            inserted += 1
+        logger.info(f"Added {inserted} fake {action} records for user {user_id}")
+        return inserted
+
+def clear_user_signals(self, user_id: int, action: str = "free_signal") -> int:
+    """Удаляет все записи сигналов указанного типа для пользователя."""
+    with self._cursor() as c:
+        c.execute("DELETE FROM actions WHERE user_id = ? AND action = ?", (user_id, action))
+        deleted = c.rowcount
+        logger.info(f"Deleted {deleted} {action} records for user {user_id}")
+        return deleted
+
+def get_signal_usage_stats(self, user_id: int) -> Dict[str, int]:
+    """Возвращает количество использованных сигналов за сегодня и всего."""
+    today_start = int(datetime.now().replace(hour=0, minute=0, second=0).timestamp())
+    with self._cursor() as c:
+        c.execute("SELECT COUNT(*) FROM actions WHERE user_id = ? AND action = 'free_signal' AND timestamp >= ?",
+                  (user_id, today_start))
+        today_free = c.fetchone()[0]
+        c.execute("SELECT COUNT(*) FROM actions WHERE user_id = ? AND action = 'premium_signal' AND timestamp >= ?",
+                  (user_id, today_start))
+        today_premium = c.fetchone()[0]
+        c.execute("SELECT COUNT(*) FROM actions WHERE user_id = ? AND action IN ('free_signal','premium_signal')",
+                  (user_id,))
+        total_all = c.fetchone()[0]
+        return {"today_free": today_free, "today_premium": today_premium, "total_signals": total_all}
+
 # ===================================================================
 # РЫНОЧНЫЕ ДАННЫЕ (реальные + мок)
 # ===================================================================
@@ -733,7 +770,7 @@ async def start_cmd(message: Message, state: FSMContext):
             db.add_referral(referrer_id, user.id)
     
     await message.answer(
-        f"🚀 *Welcome to CryptoPulse AI*, {user.first_name}!\n\n"
+        f"🚀 *Welcome to SynthraCrypto*, {user.first_name}!\n\n"
         f"🤖 AI-powered crypto signals with high accuracy.\n"
         f"💰 Premium: ${Config.SUBSCRIPTION_PRICE_USD}/{Config.SUBSCRIPTION_DAYS} days\n"
         f"🎁 Invite friends and earn ${Config.REFERRAL_BONUS_ON_SUBSCRIBE} each!\n\n"
@@ -1035,6 +1072,9 @@ async def admin_cmd(message: Message):
         f"/stats – Detailed stats\n"
         f"/ban <user_id> – Ban user\n"
         f"/unban <user_id> – Unban user"
+        f"/add_signals <id> <count> – Burn free signals\n"
+        f"/clear_signals <id> – Reset free signal counter\n"
+        f"/signal_stats <id> – Show signal usage stats"
     )
     await message.answer(text, parse_mode=ParseMode.MARKDOWN)
 
@@ -1103,6 +1143,83 @@ async def admin_unban_cmd(message: Message):
     with db._cursor() as c:
         c.execute("UPDATE users SET banned=0, ban_reason=NULL WHERE user_id=?", (target,))
     await message.answer(f"✅ User {target} unbanned.")
+
+async def admin_add_signals_cmd(message: Message):
+    """/add_signals <user_id> <count> - добавить фейковые free_signal для пользователя"""
+    if not Config.is_admin(message.from_user.id):
+        return
+    parts = message.text.split()
+    if len(parts) < 3:
+        await message.answer("Usage: /add_signals <user_id> <count>")
+        return
+    try:
+        target = int(parts[1])
+        count = int(parts[2])
+        if count < 1 or count > 1000:
+            await message.answer("Count must be between 1 and 1000")
+            return
+        inserted = db.add_fake_signals(target, count, "free_signal")
+        await message.answer(f"✅ Added {inserted} fake free_signal records for user {target}")
+    except ValueError:
+        await message.answer("Invalid user_id or count")
+
+async def admin_clear_signals_cmd(message: Message):
+    """/clear_signals <user_id> - удалить все free_signal записи пользователя"""
+    if not Config.is_admin(message.from_user.id):
+        return
+    parts = message.text.split()
+    if len(parts) < 2:
+        await message.answer("Usage: /clear_signals <user_id>")
+        return
+    try:
+        target = int(parts[1])
+        deleted = db.clear_user_signals(target, "free_signal")
+        await message.answer(f"✅ Deleted {deleted} free_signal records for user {target}")
+    except ValueError:
+        await message.answer("Invalid user_id")
+
+async def admin_add_premium_signals_cmd(message: Message):
+    """/add_premium_signals <user_id> <count> - добавить фейковые premium_signal"""
+    if not Config.is_admin(message.from_user.id):
+        return
+    parts = message.text.split()
+    if len(parts) < 3:
+        await message.answer("Usage: /add_premium_signals <user_id> <count>")
+        return
+    try:
+        target = int(parts[1])
+        count = int(parts[2])
+        if count < 1 or count > 1000:
+            await message.answer("Count must be between 1 and 1000")
+            return
+        inserted = db.add_fake_signals(target, count, "premium_signal")
+        await message.answer(f"✅ Added {inserted} fake premium_signal records for user {target}")
+    except ValueError:
+        await message.answer("Invalid user_id or count")
+
+async def admin_signal_stats_cmd(message: Message):
+    """/signal_stats <user_id> - показать статистику использования сигналов"""
+    if not Config.is_admin(message.from_user.id):
+        return
+    parts = message.text.split()
+    if len(parts) < 2:
+        await message.answer("Usage: /signal_stats <user_id>")
+        return
+    try:
+        target = int(parts[1])
+        stats = db.get_signal_usage_stats(target)
+        user = db.get_user(target)
+        name = f"@{user['username']}" if user and user.get('username') else str(target)
+        text = (
+            f"📊 *Signal usage for {name}*\n\n"
+            f"Today free signals: {stats['today_free']}\n"
+            f"Today premium signals: {stats['today_premium']}\n"
+            f"Total signals used: {stats['total_signals']}\n"
+            f"Remaining free today: {max(0, Config.FREE_SIGNALS_PER_DAY - stats['today_free'])}"
+        )
+        await message.answer(text, parse_mode=ParseMode.MARKDOWN)
+    except ValueError:
+        await message.answer("Invalid user_id")
 
 # ===================================================================
 # ФОНОВЫЕ ЗАДАЧИ (PLANNER)
@@ -1175,6 +1292,10 @@ async def main():
     dp.message.register(admin_ban_cmd, Command("ban"))
     dp.message.register(admin_unban_cmd, Command("unban"))
     dp.message.register(unknown_cmd)
+    dp.message.register(admin_add_signals_cmd, Command("add_signals"))
+    dp.message.register(admin_clear_signals_cmd, Command("clear_signals"))
+    dp.message.register(admin_add_premium_signals_cmd, Command("add_premium_signals"))
+    dp.message.register(admin_signal_stats_cmd, Command("signal_stats"))
     
     # Callback handlers
     dp.callback_query.register(callback_main_menu, F.data == "main_menu")
