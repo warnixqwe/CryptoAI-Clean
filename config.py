@@ -42,7 +42,7 @@ class Config:
     FIAT_CURRENCIES: List[str] = field(default_factory=lambda: ["USD", "EUR", "RUB", "UAH", "KZT"])
     DEFAULT_FIAT: str = "USD"
     EXCHANGES: List[str] = field(default_factory=lambda: ["binance", "bybit", "okx", "kucoin", "huobi"])
-    PRIMARY_EXCHANGE: str = os.getenv("PRIMARY_EXCHANGE", "okx")  # изменено на okx
+    PRIMARY_EXCHANGE: str = os.getenv("PRIMARY_EXCHANGE", "okx")
     MARKET_DATA_CACHE_SECONDS: int = int(os.getenv("MARKET_DATA_CACHE_SECONDS", "30"))
     WEBSOCKET_ENABLED: bool = os.getenv("WEBSOCKET_ENABLED", "false").lower() == "true"
     
@@ -116,7 +116,7 @@ class Config:
     CRYPTOCOMPARE_API_KEY: str = os.getenv("CRYPTOCOMPARE_API_KEY", "")
     TWITTER_BEARER_TOKEN: str = os.getenv("TWITTER_BEARER_TOKEN", "")
     
-    # Вычисляемые поля (заполняются в __post_init__)
+    # Вычисляемые поля
     USE_PROXY_FOR_NEWS: bool = False
     USE_REDIS: bool = False
     
