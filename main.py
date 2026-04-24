@@ -26,6 +26,7 @@
 
 import asyncio
 import logging
+import logging.handlers   # <-- ДОБАВИТЬ
 import sqlite3
 import json
 import time
