@@ -506,6 +506,29 @@ class Database:
             c.execute("DELETE FROM actions WHERE user_id=? AND action=?", (user_id, action))
             return c.rowcount
 
+    def _update_daily_stats(self, timestamp: int, column: str, delta: int = 1):
+        """Обновление дневной статистики (без ON CONFLICT, чистая SQLite)"""
+        date = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d")
+        with self._cursor() as c:
+            c.execute("SELECT * FROM daily_stats WHERE date = ?", (date,))
+            row = c.fetchone()
+            if row:
+                new_val = row[column] + delta
+                c.execute(f"UPDATE daily_stats SET {column} = ? WHERE date = ?", (new_val, date))
+            else:
+                # Создаём запись со значениями по умолчанию
+                defaults = {
+                    "new_users": 0,
+                    "active_users": 0,
+                    "subscriptions_sold": 0,
+                    "revenue_usd": 0.0
+                }
+                defaults[column] = delta
+                c.execute('''
+                    INSERT INTO daily_stats (date, new_users, active_users, subscriptions_sold, revenue_usd)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (date, defaults["new_users"], defaults["active_users"], defaults["subscriptions_sold"], defaults["revenue_usd"]))
+
 db = Database()
 
 # ===================================================================
