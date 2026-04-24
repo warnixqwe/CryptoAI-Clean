@@ -35,7 +35,7 @@ logger = None
 # Bot command menu setup
 # ===================================================================
 
-async def set_bot_commands(bot_instance = Bot(token=cfg.API_TOKEN, parse_mode="HTML"): Bot):
+async def set_bot_commands(bot_instance: Bot):
     """Set Telegram bot command menu"""
     commands = [
         BotCommand(command="start", description="Start the bot / register"),
