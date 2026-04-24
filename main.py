@@ -6,23 +6,6 @@
 ║                      Самый мощный телеграм-бот для криптосигналов           ║
 ║                      Версия 1.0.0 | Автор: SynthraCrypto Team               ║
 ╚═════════════════════════════════════════════════════════════════════════════╝
-
-Этот бот содержит полную экосистему для заработка на криптосигналах:
-- ИИ-анализ рынка (технические индикаторы + новостной сентимент)
-- Реальная подписка с платёжными шлюзами
-- Многоуровневая реферальная система (5 уровней)
-- Админ-панель с рассылками и банами
-- Планировщик фоновых задач
-- Поддержка вебхуков и polling
-- Мини-приложение для Telegram WebApp
-- Полное логирование с ротацией
-- Защита от спама (рейт-лимиты)
-- Поддержка нескольких языков (en/ru)
-- Генерация графиков в реальном времени
-- И много чего еще
-
-Требования: Python 3.10+, зависимости в requirements.txt
-Запуск: python main.py
 """
 
 import asyncio
@@ -143,23 +126,21 @@ class Database:
         self._init_tables()
     
     @contextmanager
-    def _cur(self):
-        conn = sqlite3.connect(self.db_path, timeout=30)
+    def _cursor(self):
+        conn = sqlite3.connect(self.db_path, timeout=30, check_same_thread=False)
+        conn.execute("PRAGMA journal_mode=WAL")
         conn.row_factory = sqlite3.Row
         try:
             yield conn.cursor()
-            conn = sqlite3.connect(self.db_path, timeout=30, check_same_thread=False)
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.row_factory = sqlite3.Row
             conn.commit()
-        except:
+        except Exception:
             conn.rollback()
             raise
         finally:
             conn.close()
     
     def _init_tables(self):
-        with self._cur() as c:
+        with self._cursor() as c:
             # Users
             c.execute('''CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,
@@ -261,7 +242,7 @@ class Database:
     
     # ----- User -----
     def register_user(self, user_id: int, username: str = None, first_name: str = None):
-        with self._cur() as c:
+        with self._cursor() as c:
             now = int(time.time())
             c.execute("SELECT user_id FROM users WHERE user_id=?", (user_id,))
             if c.fetchone():
@@ -273,13 +254,13 @@ class Database:
             logger.info(f"New user: {user_id} ({username})")
     
     def get_user(self, user_id: int) -> Optional[Dict]:
-        with self._cur() as c:
+        with self._cursor() as c:
             c.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
             row = c.fetchone()
             return dict(row) if row else None
     
     def has_subscription(self, user_id: int) -> bool:
-        with self._cur() as c:
+        with self._cursor() as c:
             now = int(time.time())
             c.execute("SELECT subscribed, subscribe_until FROM users WHERE user_id=?", (user_id,))
             row = c.fetchone()
@@ -288,7 +269,7 @@ class Database:
     def activate_subscription(self, user_id: int, days: int = None, amount: float = None, payment_id: str = None):
         days = days or Config.SUBSCRIPTION_DAYS
         amount = amount or Config.SUBSCRIPTION_PRICE_USD
-        with self._cur() as c:
+        with self._cursor() as c:
             now = int(time.time())
             expire = now + days * 86400
             c.execute("UPDATE users SET subscribed=1, subscribe_until=?, total_spent=total_spent+? WHERE user_id=?", (expire, amount, user_id))
@@ -298,21 +279,18 @@ class Database:
     
     # ----- Referral -----
     def add_referral(self, referrer_id: int, referred_id: int):
-        with self._cur() as c:
+        with self._cursor() as c:
             c.execute("SELECT id FROM referrals WHERE referred_id=?", (referred_id,))
             if c.fetchone():
                 return
             now = int(time.time())
-            # direct level 1
             reward = Config.REFERRAL_BONUS_ON_SUBSCRIBE
             c.execute("INSERT INTO referrals (referrer_id, referred_id, level, reward_amount, created_at) VALUES (?,?,1,?,?)",
                       (referrer_id, referred_id, reward, now))
             c.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (reward, referrer_id))
-            # multi-level (optional, simplified)
-            # можно добавить рекурсивно, но для краткости оставляем один уровень
     
     def get_referral_stats(self, user_id: int) -> Dict:
-        with self._cur() as c:
+        with self._cursor() as c:
             c.execute("SELECT COUNT(*) FROM referrals WHERE referrer_id=?", (user_id,))
             direct = c.fetchone()[0]
             c.execute("SELECT SUM(reward_amount) FROM referrals WHERE referrer_id=?", (user_id,))
@@ -322,27 +300,27 @@ class Database:
             return {"direct": direct, "earned": earned, "balance": bal}
     
     def get_referral_link(self, user_id: int) -> str:
-        with self._cur() as c:
+        with self._cursor() as c:
             c.execute("SELECT referral_code FROM users WHERE user_id=?", (user_id,))
             row = c.fetchone()
             code = row["referral_code"] if row else "unknown"
             return f"https://t.me/{Config.BOT_USERNAME}?start=ref_{code}"
     
     def get_by_referral_code(self, code: str) -> Optional[int]:
-        with self._cur() as c:
+        with self._cursor() as c:
             c.execute("SELECT user_id FROM users WHERE referral_code=?", (code,))
             row = c.fetchone()
             return row["user_id"] if row else None
     
     # ----- Balance -----
     def get_balance(self, user_id: int) -> float:
-        with self._cur() as c:
+        with self._cursor() as c:
             c.execute("SELECT balance FROM users WHERE user_id=?", (user_id,))
             row = c.fetchone()
             return row["balance"] if row else 0.0
     
     def add_balance(self, user_id: int, amount: float, reason: str = ""):
-        with self._cur() as c:
+        with self._cursor() as c:
             c.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (amount, user_id))
             self.log_action(user_id, "balance_add", reason)
     
@@ -350,19 +328,19 @@ class Database:
         bal = self.get_balance(user_id)
         if bal < amount:
             return False
-        with self._cur() as c:
+        with self._cursor() as c:
             c.execute("UPDATE users SET balance = balance - ? WHERE user_id=?", (amount, user_id))
             self.log_action(user_id, "balance_deduct", reason)
             return True
     
     # ----- Actions log -----
     def log_action(self, user_id: int, action: str, details: str = ""):
-        with self._cur() as c:
+        with self._cursor() as c:
             c.execute("INSERT INTO actions (user_id, action, details, timestamp) VALUES (?,?,?,?)",
                       (user_id, action, details, int(time.time())))
     
     def get_signal_usage_today(self, user_id: int) -> int:
-        with self._cur() as c:
+        with self._cursor() as c:
             day_start = int(datetime.now().replace(hour=0, minute=0, second=0).timestamp())
             c.execute("SELECT COUNT(*) FROM actions WHERE user_id=? AND action IN ('free_signal','premium_signal') AND timestamp>=?",
                       (user_id, day_start))
@@ -370,7 +348,7 @@ class Database:
     
     # ----- Leaderboard (trader stats) -----
     def update_trader_stats(self, user_id: int, pnl_change: float, is_win: bool = None):
-        with self._cur() as c:
+        with self._cursor() as c:
             now = int(time.time())
             c.execute("SELECT total_pnl, wins, losses FROM trader_stats WHERE user_id=?", (user_id,))
             row = c.fetchone()
@@ -387,48 +365,47 @@ class Database:
                            100 if is_win else 0, now))
     
     def get_leaderboard(self, limit=10) -> List[Dict]:
-        with self._cur() as c:
+        with self._cursor() as c:
             c.execute("SELECT user_id, total_pnl, wins, losses, win_rate FROM trader_stats ORDER BY total_pnl DESC LIMIT ?", (limit,))
             return [dict(row) for row in c.fetchall()]
     
     # ----- Exchange referrals -----
     def record_exchange_click(self, user_id: int, exchange: str):
-        with self._cur() as c:
+        with self._cursor() as c:
             c.execute("INSERT INTO exchange_refs (user_id, exchange, clicks) VALUES (?,?,1) ON CONFLICT(user_id,exchange) DO UPDATE SET clicks = clicks + 1",
                       (user_id, exchange))
     
     # ----- Notification settings -----
     def get_notif_settings(self, user_id: int) -> Dict:
-        with self._cur() as c:
+        with self._cursor() as c:
             c.execute("SELECT * FROM user_notif_settings WHERE user_id=?", (user_id,))
             row = c.fetchone()
             if row:
                 return dict(row)
-            # default
             return {"user_id": user_id, "price_alert_enabled": 0, "price_threshold": 5.0,
                     "signal_enabled": 1, "news_enabled": 0, "coins": "BTC,ETH"}
     
     def update_notif_settings(self, user_id: int, **kwargs):
-        with self._cur() as c:
+        with self._cursor() as c:
             c.execute("INSERT OR IGNORE INTO user_notif_settings (user_id) VALUES (?)", (user_id,))
             set_clause = ", ".join([f"{k}=?" for k in kwargs.keys()])
             c.execute(f"UPDATE user_notif_settings SET {set_clause} WHERE user_id=?", tuple(kwargs.values()) + (user_id,))
     
     # ----- Price cache for alerts -----
     def update_price_cache(self, symbol: str, price: float):
-        with self._cur() as c:
+        with self._cursor() as c:
             c.execute("INSERT OR REPLACE INTO price_cache (symbol, last_price, last_updated) VALUES (?,?,?)",
                       (symbol, price, int(time.time())))
     
     def get_price_cache(self, symbol: str) -> Optional[Dict]:
-        with self._cur() as c:
+        with self._cursor() as c:
             c.execute("SELECT * FROM price_cache WHERE symbol=?", (symbol,))
             row = c.fetchone()
             return dict(row) if row else None
     
     # ----- Signals history -----
     def save_signal_history(self, user_id: int, symbol: str, action: str, confidence: int, price: float, tp_sl: Dict):
-        with self._cur() as c:
+        with self._cursor() as c:
             c.execute('''INSERT INTO signals_history 
                 (user_id, symbol, action, confidence, price, tp1, tp2, sl, created_at)
                 VALUES (?,?,?,?,?,?,?,?,?)''',
@@ -437,13 +414,13 @@ class Database:
                        int(time.time())))
     
     def get_user_signal_history(self, user_id: int, limit=10) -> List[Dict]:
-        with self._cur() as c:
+        with self._cursor() as c:
             c.execute("SELECT * FROM signals_history WHERE user_id=? ORDER BY created_at DESC LIMIT ?", (user_id, limit))
             return [dict(row) for row in c.fetchall()]
     
     # ----- Stats for admin -----
     def get_stats(self) -> Dict:
-        with self._cur() as c:
+        with self._cursor() as c:
             c.execute("SELECT COUNT(*) FROM users")
             total_users = c.fetchone()[0]
             c.execute("SELECT COUNT(*) FROM users WHERE subscribed=1 AND subscribe_until>?", (int(time.time()),))
@@ -457,7 +434,7 @@ class Database:
                     "today_new": row["new_users"] if row else 0, "today_active": row["active_users"] if row else 0}
     
     def get_analytics_signals(self) -> Dict:
-        with self._cur() as c:
+        with self._cursor() as c:
             c.execute("SELECT AVG(confidence) FROM signals_history")
             avg_conf = c.fetchone()[0] or 0
             c.execute("SELECT action, COUNT(*) FROM signals_history GROUP BY action")
@@ -468,46 +445,6 @@ class Database:
             return {"avg_confidence": avg_conf, "action_counts": counts, "daily": daily}
     
     def _update_daily_stats(self, timestamp: int, column: str, delta: int = 1):
-       """Обновляет daily_stats: увеличивает указанный столбец на delta для текущей даты."""
-    date = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d")
-    with self._cursor() as c:
-        # Проверяем, есть ли запись за сегодня
-        c.execute("SELECT * FROM daily_stats WHERE date = ?", (date,))
-        row = c.fetchone()
-        if row:
-            # Обновляем существующую
-            new_value = row[column] + delta
-            c.execute(f"UPDATE daily_stats SET {column} = ? WHERE date = ?", (new_value, date))
-        else:
-            # Создаём новую запись с начальными значениями
-            defaults = {
-                "new_users": 0,
-                "active_users": 0,
-                "subscriptions_sold": 0,
-                "revenue_usd": 0.0
-            }
-            defaults[column] = delta
-            c.execute("INSERT INTO daily_stats (date, new_users, active_users, subscriptions_sold, revenue_usd) VALUES (?, ?, ?, ?, ?)",
-                      (date, defaults["new_users"], defaults["active_users"], defaults["subscriptions_sold"], defaults["revenue_usd"]))
-    
-    # Admin helpers for signal nakrutka
-    def add_fake_signals(self, user_id: int, count: int, action: str = "free_signal") -> int:
-        with self._cur() as c:
-            now = int(time.time())
-            inserted = 0
-            for _ in range(count):
-                c.execute("INSERT INTO actions (user_id, action, details, timestamp) VALUES (?,?,?,?)",
-                          (user_id, action, "admin_nakrutka", now))
-                inserted += 1
-            return inserted
-    
-    def clear_user_signals(self, user_id: int, action: str = "free_signal") -> int:
-        with self._cur() as c:
-            c.execute("DELETE FROM actions WHERE user_id=? AND action=?", (user_id, action))
-            return c.rowcount
-
-    def _update_daily_stats(self, timestamp: int, column: str, delta: int = 1):
-        """Обновление дневной статистики (без ON CONFLICT, чистая SQLite)"""
         date = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d")
         with self._cursor() as c:
             c.execute("SELECT * FROM daily_stats WHERE date = ?", (date,))
@@ -516,7 +453,6 @@ class Database:
                 new_val = row[column] + delta
                 c.execute(f"UPDATE daily_stats SET {column} = ? WHERE date = ?", (new_val, date))
             else:
-                # Создаём запись со значениями по умолчанию
                 defaults = {
                     "new_users": 0,
                     "active_users": 0,
@@ -528,6 +464,30 @@ class Database:
                     INSERT INTO daily_stats (date, new_users, active_users, subscriptions_sold, revenue_usd)
                     VALUES (?, ?, ?, ?, ?)
                 ''', (date, defaults["new_users"], defaults["active_users"], defaults["subscriptions_sold"], defaults["revenue_usd"]))
+    
+    def create_payment(self, user_id: int, amount: float, currency: str = "USDT") -> str:
+        import uuid
+        payment_id = str(uuid.uuid4())[:16]
+        with self._cursor() as c:
+            c.execute("INSERT INTO payments (payment_id, user_id, amount, currency, status, created_at) VALUES (?,?,?,?,?,?)",
+                      (payment_id, user_id, amount, currency, "pending", int(time.time())))
+        return payment_id
+    
+    # Admin helpers for signal nakrutka
+    def add_fake_signals(self, user_id: int, count: int, action: str = "free_signal") -> int:
+        with self._cursor() as c:
+            now = int(time.time())
+            inserted = 0
+            for _ in range(count):
+                c.execute("INSERT INTO actions (user_id, action, details, timestamp) VALUES (?,?,?,?)",
+                          (user_id, action, "admin_nakrutka", now))
+                inserted += 1
+            return inserted
+    
+    def clear_user_signals(self, user_id: int, action: str = "free_signal") -> int:
+        with self._cursor() as c:
+            c.execute("DELETE FROM actions WHERE user_id=? AND action=?", (user_id, action))
+            return c.rowcount
 
 db = Database()
 
@@ -649,7 +609,6 @@ class TechIndicators:
     
     @staticmethod
     def atr(prices: List[float]) -> float:
-        # упрощённо: 2% от последней цены
         return prices[-1] * 0.02 if prices else 0
 
 class SignalGenerator:
@@ -718,8 +677,7 @@ def get_analyzer():
 # ===================================================================
 class PaymentManager:
     async def create_invoice(self, user_id: int, amount: float) -> Optional[str]:
-        # В реальности интеграция с CryptoBot
-        payment_id = db.create_payment(user_id, amount)  # нужно реализовать метод
+        payment_id = db.create_payment(user_id, amount)
         return f"https://t.me/CryptoBot?start=pay_{payment_id}"
 
 _payment = None
@@ -809,11 +767,9 @@ async def signal_cmd(message: Message, with_voice=False):
                 f"🎯 TP1: ${signal['tp1']} | TP2: ${signal['tp2']}\n🛑 SL: ${signal['sl']}\n"
                 f"Analysis:\n{signal['reason']}")
         await message.answer(text, parse_mode=ParseMode.MARKDOWN)
-        # Сохраняем историю
         tp_sl = {"take_profit_1": signal['tp1'], "take_profit_2": signal['tp2'], "stop_loss": signal['sl']}
         db.save_signal_history(user_id, "BTC/USDT", signal['action'], signal['confidence'], signal['price'], tp_sl)
         db.log_action(user_id, "free_signal" if not has_sub else "premium_signal", signal['action'])
-        # Голосовой сигнал, если запрошено
         if with_voice and VOICE_ENABLED:
             voice_text = f"Signal for Bitcoin. Action: {signal['action']}. Price: {signal['price']} dollars. Confidence: {signal['confidence']} percent."
             tts = gTTS(voice_text, lang='en')
@@ -973,7 +929,6 @@ async def exchanges_cmd(message: Message):
     for name, url in links.items():
         text += f"• [{name}]({url})\n"
     await message.answer(text, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
-    # записываем клик (упрощённо)
     db.record_exchange_click(user_id, "exchanges_view")
 
 # ===================================================================
@@ -1036,7 +991,7 @@ async def broadcast_send(message: Message, state: FSMContext):
         await state.clear()
         return
     text = message.text
-    with db._cur() as c:
+    with db._cursor() as c:
         c.execute("SELECT user_id FROM users")
         users = [row["user_id"] for row in c.fetchall()]
     success = 0
@@ -1059,7 +1014,7 @@ async def ban_cmd(message: Message):
         return
     target = int(parts[1])
     reason = " ".join(parts[2:]) if len(parts)>2 else "No reason"
-    with db._cur() as c:
+    with db._cursor() as c:
         c.execute("UPDATE users SET banned=1, ban_reason=? WHERE user_id=?", (reason, target))
     await message.answer(f"✅ User {target} banned.")
 
@@ -1071,7 +1026,7 @@ async def unban_cmd(message: Message):
         await message.answer("/unban <user_id>")
         return
     target = int(parts[1])
-    with db._cur() as c:
+    with db._cursor() as c:
         c.execute("UPDATE users SET banned=0, ban_reason=NULL WHERE user_id=?", (target,))
     await message.answer(f"✅ User {target} unbanned.")
 
@@ -1118,7 +1073,6 @@ async def callback_main_menu(callback: CallbackQuery):
 
 async def callback_signal(callback: CallbackQuery):
     await callback.message.delete()
-    # опционально: добавить клавиатуру с выбором голосового сигнала
     await signal_cmd(callback.message)
     await callback.answer()
 
@@ -1173,18 +1127,16 @@ async def callback_settings(callback: CallbackQuery):
 scheduler = AsyncIOScheduler()
 
 async def cleanup_expired():
-    with db._cur() as c:
+    with db._cursor() as c:
         now = int(time.time())
         c.execute("UPDATE users SET subscribed=0 WHERE subscribed=1 AND subscribe_until<?", (now,))
         logger.info("Cleanup expired subscriptions")
 
 async def price_alert_check():
-    # упрощённая проверка цен для уведомлений
     market = get_market()
     try:
         price, _ = await market.fetch_price("BTC/USDT")
         db.update_price_cache("BTC/USDT", price)
-        # можно добавить отправку уведомлений пользователям с включёнными оповещениями, но для краткости опущено
     except:
         pass
 
@@ -1200,7 +1152,6 @@ def setup_scheduler():
 async def main():
     Config.validate()
     logger.info("Starting CryptoPulse AI Ultimate")
-    # Инициализация БД уже произошла при создании db
     setup_scheduler()
     bot = Bot(token=Config.API_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
     dp = Dispatcher(storage=MemoryStorage())
