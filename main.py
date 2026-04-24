@@ -467,11 +467,28 @@ class Database:
             daily = [{"day": row[0], "count": row[1]} for row in c.fetchall()]
             return {"avg_confidence": avg_conf, "action_counts": counts, "daily": daily}
     
-    def _update_daily_stats(self, timestamp: int, field: str, delta: int = 1):
-        date = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d")
-        with self._cur() as c:
-            c.execute(f"INSERT INTO daily_stats (date, {field}) VALUES (?, ?) ON CONFLICT(date) DO UPDATE SET {field} = {field} + ?",
-                      (date, delta, delta))
+    def _update_daily_stats(self, timestamp: int, column: str, delta: int = 1):
+       """Обновляет daily_stats: увеличивает указанный столбец на delta для текущей даты."""
+    date = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d")
+    with self._cursor() as c:
+        # Проверяем, есть ли запись за сегодня
+        c.execute("SELECT * FROM daily_stats WHERE date = ?", (date,))
+        row = c.fetchone()
+        if row:
+            # Обновляем существующую
+            new_value = row[column] + delta
+            c.execute(f"UPDATE daily_stats SET {column} = ? WHERE date = ?", (new_value, date))
+        else:
+            # Создаём новую запись с начальными значениями
+            defaults = {
+                "new_users": 0,
+                "active_users": 0,
+                "subscriptions_sold": 0,
+                "revenue_usd": 0.0
+            }
+            defaults[column] = delta
+            c.execute("INSERT INTO daily_stats (date, new_users, active_users, subscriptions_sold, revenue_usd) VALUES (?, ?, ?, ?, ?)",
+                      (date, defaults["new_users"], defaults["active_users"], defaults["subscriptions_sold"], defaults["revenue_usd"]))
     
     # Admin helpers for signal nakrutka
     def add_fake_signals(self, user_id: int, count: int, action: str = "free_signal") -> int:
