@@ -68,50 +68,38 @@ async def set_bot_commands(bot_instance: Bot):
 # ===================================================================
 
 async def on_startup(bot: Bot):
-    """Actions to perform when bot starts"""
     logger.info("Bot is starting up...")
     
-    # Initialize database connections (already done in get_db)
-    db = get_db()
-    logger.info("Database ready")
-    
-    # Warm up caches
+    # Неблокирующий прогрев кэша
     try:
         market = get_market_provider()
         await market.get_market_summary()
         logger.info("Market cache warmed up")
     except Exception as e:
-        logger.warning(f"Market warm-up failed: {e}")
+        logger.warning(f"Market warm-up failed (non-critical): {e}")
     
     try:
         news = get_news_aggregator()
         await news.get_news_summary(5)
         logger.info("News cache warmed up")
     except Exception as e:
-        logger.warning(f"News warm-up failed: {e}")
+        logger.warning(f"News warm-up failed (non-critical): {e}")
     
-    # Start background scheduler
+    # Запуск планировщика
     start_scheduler()
     logger.info("Background scheduler started")
     
-    # Set bot commands
     await set_bot_commands(bot)
+    logger.info("Bot commands set")
     
-    # Log startup completion
-    logger.info("Bot started successfully")
-    
-    # Notify admins
+    # Уведомление админов
     for admin_id in cfg.ADMIN_IDS:
         try:
-            await bot.send_message(
-                admin_id,
-                f"🤖 *CryptoPulse AI Bot Started*\n"
-                f"Time: {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                f"Mode: {'Webhook' if cfg.USE_WEBHOOK else 'Polling'}",
-                parse_mode="Markdown"
-            )
-        except Exception as e:
-            logger.warning(f"Failed to notify admin {admin_id}: {e}")
+            await bot.send_message(admin_id, "🤖 CryptoPulse AI Bot Started")
+        except:
+            pass
+    
+    logger.info("Startup complete")
 
 async def on_shutdown(bot: Bot):
     """Actions to perform when bot stops"""
