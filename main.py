@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 """
 ╔═════════════════════════════════════════════════════════════════════════════╗
-║                         SynthraCrypto ULTIMATE                              ║
-║                      Самый мощный телеграм-бот для криптосигналов           ║
-║                      Версия 2.0.0 | Mini App + Fixed DB                     ║
+║                           SynthraCrypto ULTIMATE                            ║
+║                   Самый мощный телеграм-бот для криптосигналов              ║
+║                                Версия 1.1.0                                 ║
 ╚═════════════════════════════════════════════════════════════════════════════╝
 """
 
@@ -259,9 +259,19 @@ class Database:
                 last_price REAL,
                 last_updated INTEGER
             )''')
+            # Admin logs
+            c.execute('''CREATE TABLE IF NOT EXISTS admin_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                admin_id INTEGER,
+                action TEXT,
+                target_user INTEGER,
+                details TEXT,
+                timestamp INTEGER
+            )''')
             # Indexes
             c.execute("CREATE INDEX IF NOT EXISTS idx_actions_user ON actions(user_id, timestamp)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_signals_user ON signals_history(user_id, created_at)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_admin_logs ON admin_logs(timestamp)")
     
     @retry_on_lock
     def register_user(self, user_id: int, username: str = None, first_name: str = None):
@@ -281,6 +291,18 @@ class Database:
             c.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
             row = c.fetchone()
             return dict(row) if row else None
+    
+    def get_user_language(self, user_id: int) -> str:
+        with self._cursor() as c:
+            c.execute("SELECT language FROM users WHERE user_id=?", (user_id,))
+            row = c.fetchone()
+            return row["language"] if row else "en"
+    
+    @retry_on_lock
+    def update_language(self, user_id: int, lang: str):
+        with self._cursor() as c:
+            c.execute("UPDATE users SET language=? WHERE user_id=?", (lang, user_id))
+            logger.info(f"User {user_id} changed language to {lang}")
     
     def has_subscription(self, user_id: int) -> bool:
         with self._cursor() as c:
@@ -363,6 +385,12 @@ class Database:
         with self._cursor() as c:
             c.execute("INSERT INTO actions (user_id, action, details, timestamp) VALUES (?,?,?,?)",
                       (user_id, action, details, int(time.time())))
+    
+    @retry_on_lock
+    def log_admin_action(self, admin_id: int, action: str, target_user: int = None, details: str = ""):
+        with self._cursor() as c:
+            c.execute("INSERT INTO admin_logs (admin_id, action, target_user, details, timestamp) VALUES (?,?,?,?,?)",
+                      (admin_id, action, target_user, details, int(time.time())))
     
     def get_signal_usage_today(self, user_id: int) -> int:
         with self._cursor() as c:
@@ -734,14 +762,76 @@ def main_menu() -> InlineKeyboardMarkup:
 def back_button() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Back", callback_data="main_menu")]])
 
+def admin_panel_menu() -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats"),
+         InlineKeyboardButton(text="👥 Пользователи", callback_data="admin_users")],
+        [InlineKeyboardButton(text="🎁 Выдать премиум", callback_data="admin_give_premium"),
+         InlineKeyboardButton(text="🚫 Забанить", callback_data="admin_ban")],
+        [InlineKeyboardButton(text="✅ Разбанить", callback_data="admin_unban"),
+         InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast")],
+        [InlineKeyboardButton(text="📈 Накрутка сигналов", callback_data="admin_add_signals"),
+         InlineKeyboardButton(text="🗑 Очистить сигналы", callback_data="admin_clear_signals")],
+        [InlineKeyboardButton(text="🔙 Назад в меню", callback_data="main_menu")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def settings_keyboard() -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton(text="📊 Ценовые уведомления", callback_data="toggle_price"),
+         InlineKeyboardButton(text="⚡ Сигналы", callback_data="toggle_signal")],
+        [InlineKeyboardButton(text="🗞️ Новости", callback_data="toggle_news"),
+         InlineKeyboardButton(text="💰 Сменить порог цены", callback_data="set_threshold")],
+        [InlineKeyboardButton(text="🌐 Сменить язык", callback_data="change_language"),
+         InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def language_keyboard(current_lang: str) -> InlineKeyboardMarkup:
+    languages = [
+        ("🇬🇧 English", "en"),
+        ("🇷🇺 Русский", "ru"),
+        ("🇪🇸 Español", "es"),
+        ("🇩🇪 Deutsch", "de"),
+        ("🇫🇷 Français", "fr"),
+        ("🇨🇳 中文", "zh")
+    ]
+    buttons = []
+    for label, code in languages:
+        indicator = " ✅" if code == current_lang else ""
+        buttons.append([InlineKeyboardButton(text=label + indicator, callback_data=f"set_lang_{code}")])
+    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="settings")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 # ===================================================================
-# FSM
+# FSM States
 # ===================================================================
 class WithdrawStates(StatesGroup):
     waiting_address = State()
 
 class BroadcastStates(StatesGroup):
     waiting_message = State()
+
+class AdminGivePremiumStates(StatesGroup):
+    waiting_user_id = State()
+    waiting_days = State()
+
+class AdminBanStates(StatesGroup):
+    waiting_user_id = State()
+    waiting_reason = State()
+
+class AdminUnbanStates(StatesGroup):
+    waiting_user_id = State()
+
+class AdminAddSignalsStates(StatesGroup):
+    waiting_user_id = State()
+    waiting_count = State()
+
+class AdminClearSignalsStates(StatesGroup):
+    waiting_user_id = State()
+
+class ThresholdState(StatesGroup):
+    waiting_threshold = State()
 
 # ===================================================================
 # ХЕНДЛЕРЫ КОМАНД
@@ -755,15 +845,12 @@ async def start_cmd(message: Message, state: FSMContext):
         referrer = db.get_by_referral_code(ref_code)
         if referrer and referrer != user.id:
             db.add_referral(referrer, user.id)
-    await message.answer(
-        f"🚀 *Welcome to CryptoPulse AI*, {user.first_name}!\n\n"
-        f"AI-powered crypto signals with TP/SL.\n"
-        f"💰 Premium: ${Config.SUBSCRIPTION_PRICE_USD}/{Config.SUBSCRIPTION_DAYS} days\n"
-        f"Use /menu\n"
-        f"Use /app to open web app",
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=main_menu()
-    )
+    lang = db.get_user_language(user.id)
+    welcome_text = {
+        "en": f"🚀 *Welcome to SynthraCrypto*, {user.first_name}!\n\nAI-powered crypto signals with TP/SL.\n💰 Premium: ${Config.SUBSCRIPTION_PRICE_USD}/{Config.SUBSCRIPTION_DAYS} days\nUse /menu",
+        "ru": f"🚀 *Добро пожаловать в SynthraCrypto*, {user.first_name}!\n\nAI-сигналы с TP/SL.\n💰 Премиум: ${Config.SUBSCRIPTION_PRICE_USD}/{Config.SUBSCRIPTION_DAYS} дней\nИспользуйте /menu"
+    }.get(lang, welcome_text_en)
+    await message.answer(welcome_text, parse_mode=ParseMode.MARKDOWN, reply_markup=main_menu())
     await state.clear()
 
 async def menu_cmd(message: Message, state: FSMContext):
@@ -901,13 +988,11 @@ async def help_cmd(message: Message):
             "/subscribe, /pay, /referral, /balance, /withdraw, /profile\n"
             "/join_competition, /submit_trade, /leaderboard\n"
             "/exchanges, /settings, /history\n"
-            "/admin, /stats, /broadcast, /ban, /unban, /add_signals, /clear_signals, /signal_stats\n"
             "/app – Open Mini App")
     await message.answer(text, parse_mode=ParseMode.MARKDOWN)
 
 async def app_cmd(message: Message):
     webapp_url = f"https://{os.getenv('RAILWAY_PUBLIC_DOMAIN', 'localhost')}/static/index.html"
-    # Если домен не задан, используем относительный путь (для локального теста)
     if "localhost" in webapp_url:
         webapp_url = "http://web-production-989b49.up.railway.app/static/index.html"
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🚀 Open Mini App", web_app={"url": webapp_url})]])
@@ -968,25 +1053,31 @@ async def settings_cmd(message: Message):
     text = (f"🔔 *Notifications*\nPrice alerts: {'✅' if s['price_alert_enabled'] else '❌'} (threshold {s['price_threshold']}%)\n"
             f"Signal alerts: {'✅' if s['signal_enabled'] else '❌'}\nNews alerts: {'✅' if s['news_enabled'] else '❌'}\n"
             f"Coins: {s['coins']}")
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📊 Price Alert", callback_data="toggle_price"),
-         InlineKeyboardButton(text="⚡ Signal Alert", callback_data="toggle_signal")],
-        [InlineKeyboardButton(text="🗞️ News Alert", callback_data="toggle_news"),
-         InlineKeyboardButton(text="💰 Threshold", callback_data="set_threshold")],
-        [InlineKeyboardButton(text="🔙 Back", callback_data="main_menu")]
-    ])
-    await message.answer(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+    await message.answer(text, parse_mode=ParseMode.MARKDOWN, reply_markup=settings_keyboard())
 
-async def history_cmd(message: Message):
-    history = db.get_user_signal_history(message.from_user.id, 10)
-    if not history:
-        await message.answer("No signals yet.")
-        return
-    text = "📜 *Last 10 signals*\n"
-    for h in history:
-        dt = datetime.fromtimestamp(h["created_at"]).strftime("%m-%d %H:%M")
-        text += f"{dt} {h['symbol']}: *{h['action']}* (conf {h['confidence']}%)\n"
-    await message.answer(text, parse_mode=ParseMode.MARKDOWN)
+async def settings_toggle(callback: CallbackQuery, setting: str, field: str):
+    user_id = callback.from_user.id
+    s = db.get_notif_settings(user_id)
+    new_val = 1 - s[field]
+    db.update_notif_settings(user_id, **{field: new_val})
+    await callback.answer(f"{'✅ Enabled' if new_val else '❌ Disabled'}")
+    await settings_cmd(callback.message)
+
+async def set_threshold_start(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer("Enter new price alert threshold in % (e.g., 5):")
+    await state.set_state(ThresholdState.waiting_threshold)
+    await callback.answer()
+
+async def set_threshold_value(message: Message, state: FSMContext):
+    try:
+        threshold = float(message.text.strip())
+        if threshold <= 0:
+            raise ValueError
+        db.update_notif_settings(message.from_user.id, price_threshold=threshold)
+        await message.answer(f"✅ Price alert threshold set to {threshold}%")
+    except:
+        await message.answer("❌ Invalid number. Please enter a positive number.")
+    await state.clear()
 
 # ===================================================================
 # АДМИН-ПАНЕЛЬ
@@ -994,10 +1085,7 @@ async def history_cmd(message: Message):
 async def admin_cmd(message: Message):
     if not Config.is_admin(message.from_user.id):
         return
-    stats = db.get_stats()
-    text = (f"🛡️ *Admin*\nUsers: {stats['total_users']}\nPremium: {stats['active_premium']}\n"
-            f"Revenue: ${stats['revenue']:.2f}\nToday new: {stats['today_new']}")
-    await message.answer(text, parse_mode=ParseMode.MARKDOWN)
+    await message.answer("🛡️ *Admin Panel*", parse_mode=ParseMode.MARKDOWN, reply_markup=admin_panel_menu())
 
 async def admin_stats_cmd(message: Message):
     if not Config.is_admin(message.from_user.id):
@@ -1009,19 +1097,85 @@ async def admin_stats_cmd(message: Message):
             f"BUY/SELL/HOLD: {analytics['action_counts'].get('BUY',0)}/{analytics['action_counts'].get('SELL',0)}/{analytics['action_counts'].get('HOLD',0)}")
     await message.answer(text, parse_mode=ParseMode.MARKDOWN)
 
-async def broadcast_cmd(message: Message, state: FSMContext):
-    if not Config.is_admin(message.from_user.id):
-        return
-    await message.answer("📢 Send broadcast message:")
-    await state.set_state(BroadcastStates.waiting_message)
+async def admin_give_premium_start(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer("Enter user ID to give premium:")
+    await state.set_state(AdminGivePremiumStates.waiting_user_id)
+    await callback.answer()
 
-async def broadcast_send(message: Message, state: FSMContext):
-    if not Config.is_admin(message.from_user.id):
+async def admin_give_premium_user(message: Message, state: FSMContext):
+    try:
+        user_id = int(message.text.strip())
+        await state.update_data(target_user=user_id)
+        await message.answer(f"Enter number of days (default {Config.SUBSCRIPTION_DAYS}):")
+        await state.set_state(AdminGivePremiumStates.waiting_days)
+    except:
+        await message.answer("Invalid user ID. Please enter numeric ID.")
         await state.clear()
-        return
+
+async def admin_give_premium_days(message: Message, state: FSMContext):
+    data = await state.get_data()
+    target = data.get("target_user")
+    days_text = message.text.strip()
+    days = int(days_text) if days_text.isdigit() else Config.SUBSCRIPTION_DAYS
+    db.activate_subscription(target, days, 0)
+    await message.answer(f"✅ Premium subscription activated for user {target} for {days} days.")
+    db.log_admin_action(message.from_user.id, "give_premium", target, f"days={days}")
+    try:
+        await message.bot.send_message(target, f"🎉 You have received a free premium subscription for {days} days! Use /menu to enjoy unlimited signals.")
+    except:
+        pass
+    await state.clear()
+
+async def admin_ban_start(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer("Enter user ID to ban:")
+    await state.set_state(AdminBanStates.waiting_user_id)
+    await callback.answer()
+
+async def admin_ban_user(message: Message, state: FSMContext):
+    try:
+        user_id = int(message.text.strip())
+        await state.update_data(target_user=user_id)
+        await message.answer("Enter ban reason (optional):")
+        await state.set_state(AdminBanStates.waiting_reason)
+    except:
+        await message.answer("Invalid user ID.")
+        await state.clear()
+
+async def admin_ban_reason(message: Message, state: FSMContext):
+    data = await state.get_data()
+    target = data.get("target_user")
+    reason = message.text.strip() or "No reason"
+    with db._cursor() as c:
+        c.execute("UPDATE users SET banned=1, ban_reason=? WHERE user_id=?", (reason, target))
+    await message.answer(f"✅ User {target} banned.\nReason: {reason}")
+    db.log_admin_action(message.from_user.id, "ban", target, reason)
+    await state.clear()
+
+async def admin_unban_start(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer("Enter user ID to unban:")
+    await state.set_state(AdminUnbanStates.waiting_user_id)
+    await callback.answer()
+
+async def admin_unban_user(message: Message, state: FSMContext):
+    try:
+        target = int(message.text.strip())
+        with db._cursor() as c:
+            c.execute("UPDATE users SET banned=0, ban_reason=NULL WHERE user_id=?", (target,))
+        await message.answer(f"✅ User {target} unbanned.")
+        db.log_admin_action(message.from_user.id, "unban", target)
+    except:
+        await message.answer("Invalid user ID.")
+    await state.clear()
+
+async def admin_broadcast_start(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer("📢 Send broadcast message:")
+    await state.set_state(BroadcastStates.waiting_message)
+    await callback.answer()
+
+async def admin_broadcast_send(message: Message, state: FSMContext):
     text = message.text
     with db._cursor() as c:
-        c.execute("SELECT user_id FROM users")
+        c.execute("SELECT user_id FROM users WHERE banned=0 OR banned IS NULL")
         users = [row["user_id"] for row in c.fetchall()]
     success = 0
     for uid in users:
@@ -1032,66 +1186,52 @@ async def broadcast_send(message: Message, state: FSMContext):
         except:
             pass
     await message.answer(f"✅ Sent to {success} users")
+    db.log_admin_action(message.from_user.id, "broadcast", None, f"sent to {success}")
     await state.clear()
 
-async def ban_cmd(message: Message):
-    if not Config.is_admin(message.from_user.id):
-        return
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.answer("/ban <user_id> [reason]")
-        return
-    target = int(parts[1])
-    reason = " ".join(parts[2:]) if len(parts)>2 else "No reason"
-    with db._cursor() as c:
-        c.execute("UPDATE users SET banned=1, ban_reason=? WHERE user_id=?", (reason, target))
-    await message.answer(f"✅ User {target} banned.")
+async def admin_add_signals_start(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer("Enter user ID to add fake signals:")
+    await state.set_state(AdminAddSignalsStates.waiting_user_id)
+    await callback.answer()
 
-async def unban_cmd(message: Message):
-    if not Config.is_admin(message.from_user.id):
-        return
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.answer("/unban <user_id>")
-        return
-    target = int(parts[1])
-    with db._cursor() as c:
-        c.execute("UPDATE users SET banned=0, ban_reason=NULL WHERE user_id=?", (target,))
-    await message.answer(f"✅ User {target} unbanned.")
+async def admin_add_signals_user(message: Message, state: FSMContext):
+    try:
+        user_id = int(message.text.strip())
+        await state.update_data(target_user=user_id)
+        await message.answer("Enter number of fake signals to add:")
+        await state.set_state(AdminAddSignalsStates.waiting_count)
+    except:
+        await message.answer("Invalid user ID.")
+        await state.clear()
 
-async def add_signals_cmd(message: Message):
-    if not Config.is_admin(message.from_user.id):
-        return
-    parts = message.text.split()
-    if len(parts) < 3:
-        await message.answer("/add_signals <user_id> <count>")
-        return
-    target = int(parts[1])
-    count = int(parts[2])
-    inserted = db.add_fake_signals(target, count, "free_signal")
-    await message.answer(f"✅ Added {inserted} fake signals to user {target}")
+async def admin_add_signals_count(message: Message, state: FSMContext):
+    data = await state.get_data()
+    target = data.get("target_user")
+    try:
+        count = int(message.text.strip())
+        if count <= 0:
+            raise ValueError
+        inserted = db.add_fake_signals(target, count, "free_signal")
+        await message.answer(f"✅ Added {inserted} fake free signals to user {target}")
+        db.log_admin_action(message.from_user.id, "add_signals", target, f"count={count}")
+    except:
+        await message.answer("Invalid count.")
+    await state.clear()
 
-async def clear_signals_cmd(message: Message):
-    if not Config.is_admin(message.from_user.id):
-        return
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.answer("/clear_signals <user_id>")
-        return
-    target = int(parts[1])
-    deleted = db.clear_user_signals(target, "free_signal")
-    await message.answer(f"✅ Deleted {deleted} free signals for user {target}")
+async def admin_clear_signals_start(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer("Enter user ID to clear free signals:")
+    await state.set_state(AdminClearSignalsStates.waiting_user_id)
+    await callback.answer()
 
-async def signal_stats_cmd(message: Message):
-    if not Config.is_admin(message.from_user.id):
-        return
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.answer("/signal_stats <user_id>")
-        return
-    target = int(parts[1])
-    used = db.get_signal_usage_today(target)
-    await message.answer(f"User {target}: used {used}/{Config.FREE_SIGNALS_PER_DAY} free signals today.")
+async def admin_clear_signals_user(message: Message, state: FSMContext):
+    try:
+        target = int(message.text.strip())
+        deleted = db.clear_user_signals(target, "free_signal")
+        await message.answer(f"✅ Deleted {deleted} free signals for user {target}")
+        db.log_admin_action(message.from_user.id, "clear_signals", target)
+    except:
+        await message.answer("Invalid user ID.")
+    await state.clear()
 
 # ===================================================================
 # CALLBACK HANDLERS
@@ -1150,6 +1290,59 @@ async def callback_settings(callback: CallbackQuery):
     await settings_cmd(callback.message)
     await callback.answer()
 
+async def callback_toggle_price(callback: CallbackQuery):
+    await settings_toggle(callback, "price_alert", "price_alert_enabled")
+
+async def callback_toggle_signal(callback: CallbackQuery):
+    await settings_toggle(callback, "signal_alert", "signal_enabled")
+
+async def callback_toggle_news(callback: CallbackQuery):
+    await settings_toggle(callback, "news_alert", "news_enabled")
+
+async def callback_set_threshold(callback: CallbackQuery, state: FSMContext):
+    await set_threshold_start(callback, state)
+
+async def callback_change_language(callback: CallbackQuery):
+    lang = db.get_user_language(callback.from_user.id)
+    await callback.message.edit_text("🌐 *Select language:*", parse_mode=ParseMode.MARKDOWN, reply_markup=language_keyboard(lang))
+    await callback.answer()
+
+async def callback_set_language(callback: CallbackQuery):
+    lang = callback.data.split("_")[-1]
+    db.update_language(callback.from_user.id, lang)
+    await callback.answer(f"Language changed to {lang.upper()}")
+    await callback.message.edit_text("Language updated. Use /menu to continue.", parse_mode=ParseMode.MARKDOWN, reply_markup=back_button())
+
+async def callback_admin_panel(callback: CallbackQuery):
+    if not Config.is_admin(callback.from_user.id):
+        await callback.answer("Access denied", show_alert=True)
+        return
+    await callback.message.edit_text("🛡️ *Admin Panel*", parse_mode=ParseMode.MARKDOWN, reply_markup=admin_panel_menu())
+    await callback.answer()
+
+# Админ-колбэки
+async def callback_admin_stats(callback: CallbackQuery):
+    await admin_stats_cmd(callback.message)
+    await callback.answer()
+
+async def callback_admin_give_premium(callback: CallbackQuery, state: FSMContext):
+    await admin_give_premium_start(callback, state)
+
+async def callback_admin_ban(callback: CallbackQuery, state: FSMContext):
+    await admin_ban_start(callback, state)
+
+async def callback_admin_unban(callback: CallbackQuery, state: FSMContext):
+    await admin_unban_start(callback, state)
+
+async def callback_admin_broadcast(callback: CallbackQuery, state: FSMContext):
+    await admin_broadcast_start(callback, state)
+
+async def callback_admin_add_signals(callback: CallbackQuery, state: FSMContext):
+    await admin_add_signals_start(callback, state)
+
+async def callback_admin_clear_signals(callback: CallbackQuery, state: FSMContext):
+    await admin_clear_signals_start(callback, state)
+
 # ===================================================================
 # ПЛАНИРОВЩИК
 # ===================================================================
@@ -1163,27 +1356,17 @@ async def cleanup_expired():
 
 def setup_scheduler():
     scheduler.add_job(cleanup_expired, CronTrigger(hour=0, minute=30))
-    # price_alert_check отключён, чтобы не блокировать БД
     scheduler.start()
     logger.info("Scheduler started")
 
 # ===================================================================
-# ВЕБ-СЕРВЕР ДЛЯ МИНИ-ПРИЛОЖЕНИЯ (aiohttp)
+# ВЕБ-СЕРВЕР ДЛЯ МИНИ-ПРИЛОЖЕНИЯ
 # ===================================================================
-
 async def webapp_index(request):
     index_path = Path(__file__).parent / "webapp" / "index.html"
     if not index_path.exists():
         return web.Response(text="WebApp not found. Please create webapp folder.", status=404)
     return web.FileResponse(index_path)
-
-async def webapp_index(request):
-    print(f"Request path: {request.path}")
-    file_path = Path(__file__).parent / "webapp" / "index.html"
-    print(f"Looking for: {file_path}")
-    if not file_path.exists():
-        return web.Response(text=f"Not found: {file_path}", status=404)
-    return web.FileResponse(file_path)
 
 async def webapp_static(request):
     filename = request.match_info['filename']
@@ -1192,12 +1375,11 @@ async def webapp_static(request):
         return web.Response(status=404)
     return web.FileResponse(file_path)
 
-# API endpoints
+# API endpoints (остались без изменений)
 async def api_signal(request):
     data = await request.json()
     user_id = data.get('user_id')
     symbol = data.get('params', {}).get('symbol', 'BTC/USDT')
-    # генерируем сигнал
     market = get_market()
     news = get_news()
     analyzer = get_analyzer()
@@ -1224,18 +1406,10 @@ async def api_chart(request):
     symbol = data.get('params', {}).get('symbol', 'BTC/USDT')
     timeframe = data.get('params', {}).get('timeframe', '1h')
     limit = data.get('params', {}).get('limit', 50)
-    
     market = get_market()
-    # Получаем цены закрытия (или полноценные OHLCV, если есть)
     try:
-        # Если у вас есть метод get_ohlcv – используйте его
-        # Например, через ccxt:
-        # ohlcv = await market.get_ohlcv(symbol, timeframe, limit)
-        # или используем заглушку с преобразованием
         prices = await market.get_historical_prices(symbol, limit)
-        # Строим свечи из цен (упрощённо, но для демо хватит)
         candles = []
-        base_price = prices[0] if prices else 50000
         for i, p in enumerate(prices):
             ts = int(time.time()) - (limit - i) * 3600
             high = p + random.uniform(0, p*0.02)
@@ -1300,14 +1474,13 @@ async def start_web_server():
 # ===================================================================
 async def main():
     Config.validate()
-    logger.info("Starting CryptoPulse AI Ultimate")
+    logger.info("Starting SynthraCrypto Ultimate")
     setup_scheduler()
-    # Запускаем веб-сервер в фоне
     asyncio.create_task(start_web_server())
     bot = Bot(token=Config.API_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
     dp = Dispatcher(storage=MemoryStorage())
     
-    # Регистрация команд
+    # Команды
     dp.message.register(start_cmd, Command("start"))
     dp.message.register(menu_cmd, Command("menu"))
     dp.message.register(signal_cmd, Command("signal"))
@@ -1329,18 +1502,21 @@ async def main():
     dp.message.register(exchanges_cmd, Command("exchanges"))
     dp.message.register(settings_cmd, Command("settings"))
     dp.message.register(history_cmd, Command("history"))
-    # Админ
+    # Админ-команды (текстовые)
     dp.message.register(admin_cmd, Command("admin"))
     dp.message.register(admin_stats_cmd, Command("stats"))
-    dp.message.register(broadcast_cmd, Command("broadcast"))
-    dp.message.register(ban_cmd, Command("ban"))
-    dp.message.register(unban_cmd, Command("unban"))
-    dp.message.register(add_signals_cmd, Command("add_signals"))
-    dp.message.register(clear_signals_cmd, Command("clear_signals"))
-    dp.message.register(signal_stats_cmd, Command("signal_stats"))
-    # FSM
+    # FSM обработчики
     dp.message.register(withdraw_address, WithdrawStates.waiting_address)
-    dp.message.register(broadcast_send, BroadcastStates.waiting_message)
+    dp.message.register(admin_broadcast_send, BroadcastStates.waiting_message)
+    dp.message.register(admin_give_premium_user, AdminGivePremiumStates.waiting_user_id)
+    dp.message.register(admin_give_premium_days, AdminGivePremiumStates.waiting_days)
+    dp.message.register(admin_ban_user, AdminBanStates.waiting_user_id)
+    dp.message.register(admin_ban_reason, AdminBanStates.waiting_reason)
+    dp.message.register(admin_unban_user, AdminUnbanStates.waiting_user_id)
+    dp.message.register(admin_add_signals_user, AdminAddSignalsStates.waiting_user_id)
+    dp.message.register(admin_add_signals_count, AdminAddSignalsStates.waiting_count)
+    dp.message.register(admin_clear_signals_user, AdminClearSignalsStates.waiting_user_id)
+    dp.message.register(set_threshold_value, ThresholdState.waiting_threshold)
     
     # Callbacks
     dp.callback_query.register(callback_main_menu, F.data == "main_menu")
@@ -1354,8 +1530,21 @@ async def main():
     dp.callback_query.register(callback_help, F.data == "help")
     dp.callback_query.register(callback_leaderboard, F.data == "leaderboard")
     dp.callback_query.register(callback_settings, F.data == "settings")
+    dp.callback_query.register(callback_toggle_price, F.data == "toggle_price")
+    dp.callback_query.register(callback_toggle_signal, F.data == "toggle_signal")
+    dp.callback_query.register(callback_toggle_news, F.data == "toggle_news")
+    dp.callback_query.register(callback_set_threshold, F.data == "set_threshold")
+    dp.callback_query.register(callback_change_language, F.data == "change_language")
+    dp.callback_query.register(callback_set_language, F.data.startswith("set_lang_"))
+    dp.callback_query.register(callback_admin_panel, F.data == "admin")
+    dp.callback_query.register(callback_admin_stats, F.data == "admin_stats")
+    dp.callback_query.register(callback_admin_give_premium, F.data == "admin_give_premium")
+    dp.callback_query.register(callback_admin_ban, F.data == "admin_ban")
+    dp.callback_query.register(callback_admin_unban, F.data == "admin_unban")
+    dp.callback_query.register(callback_admin_broadcast, F.data == "admin_broadcast")
+    dp.callback_query.register(callback_admin_add_signals, F.data == "admin_add_signals")
+    dp.callback_query.register(callback_admin_clear_signals, F.data == "admin_clear_signals")
     
-    # Удаляем вебхук и polling
     await bot.delete_webhook(drop_pending_updates=True)
     logger.info("Polling started")
     await dp.start_polling(bot)
