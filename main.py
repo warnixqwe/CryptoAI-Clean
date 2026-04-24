@@ -4,7 +4,7 @@
 ╔═════════════════════════════════════════════════════════════════════════════╗
 ║                         SynthraCrypto ULTIMATE                              ║
 ║                      Самый мощный телеграм-бот для криптосигналов           ║
-║                      Версия 1.0.0 | Автор: SynthraCrypto Team               ║
+║                      Версия 2.0.0 | Mini App + Fixed DB                     ║
 ╚═════════════════════════════════════════════════════════════════════════════╝
 """
 
@@ -23,6 +23,8 @@ import sys
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Tuple
 from contextlib import contextmanager
+from functools import wraps
+from pathlib import Path
 
 # Telegram
 from aiogram import Bot, Dispatcher, types, F
@@ -33,6 +35,9 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+
+# Web server for Mini App
+from aiohttp import web
 
 # Дополнительные библиотеки
 import aiohttp
@@ -118,7 +123,24 @@ def setup_logging():
 logger = setup_logging()
 
 # ===================================================================
-# БАЗА ДАННЫХ (расширенная)
+# ДЕКОРАТОР ДЛЯ RETRY ПРИ DATABASE LOCKED
+# ===================================================================
+def retry_on_lock(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        for attempt in range(5):
+            try:
+                return func(self, *args, **kwargs)
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e) and attempt < 4:
+                    time.sleep(0.5 * (attempt + 1))
+                else:
+                    raise
+        return None
+    return wrapper
+
+# ===================================================================
+# БАЗА ДАННЫХ (расширенная, с retry)
 # ===================================================================
 class Database:
     def __init__(self):
@@ -127,8 +149,9 @@ class Database:
     
     @contextmanager
     def _cursor(self):
-        conn = sqlite3.connect(self.db_path, timeout=30, check_same_thread=False)
+        conn = sqlite3.connect(self.db_path, timeout=30, isolation_level=None)
         conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=30000")
         conn.row_factory = sqlite3.Row
         try:
             yield conn.cursor()
@@ -240,7 +263,7 @@ class Database:
             c.execute("CREATE INDEX IF NOT EXISTS idx_actions_user ON actions(user_id, timestamp)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_signals_user ON signals_history(user_id, created_at)")
     
-    # ----- User -----
+    @retry_on_lock
     def register_user(self, user_id: int, username: str = None, first_name: str = None):
         with self._cursor() as c:
             now = int(time.time())
@@ -266,6 +289,7 @@ class Database:
             row = c.fetchone()
             return row and row["subscribed"] == 1 and row["subscribe_until"] > now
     
+    @retry_on_lock
     def activate_subscription(self, user_id: int, days: int = None, amount: float = None, payment_id: str = None):
         days = days or Config.SUBSCRIPTION_DAYS
         amount = amount or Config.SUBSCRIPTION_PRICE_USD
@@ -277,7 +301,7 @@ class Database:
                 c.execute("UPDATE payments SET status='paid', paid_at=? WHERE payment_id=?", (now, payment_id))
             self.log_action(user_id, "subscribe", f"{days}d ${amount}")
     
-    # ----- Referral -----
+    @retry_on_lock
     def add_referral(self, referrer_id: int, referred_id: int):
         with self._cursor() as c:
             c.execute("SELECT id FROM referrals WHERE referred_id=?", (referred_id,))
@@ -312,18 +336,13 @@ class Database:
             row = c.fetchone()
             return row["user_id"] if row else None
     
-    # ----- Balance -----
-    def get_balance(self, user_id: int) -> float:
-        with self._cursor() as c:
-            c.execute("SELECT balance FROM users WHERE user_id=?", (user_id,))
-            row = c.fetchone()
-            return row["balance"] if row else 0.0
-    
+    @retry_on_lock
     def add_balance(self, user_id: int, amount: float, reason: str = ""):
         with self._cursor() as c:
             c.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (amount, user_id))
             self.log_action(user_id, "balance_add", reason)
     
+    @retry_on_lock
     def deduct_balance(self, user_id: int, amount: float, reason: str = "") -> bool:
         bal = self.get_balance(user_id)
         if bal < amount:
@@ -333,7 +352,13 @@ class Database:
             self.log_action(user_id, "balance_deduct", reason)
             return True
     
-    # ----- Actions log -----
+    def get_balance(self, user_id: int) -> float:
+        with self._cursor() as c:
+            c.execute("SELECT balance FROM users WHERE user_id=?", (user_id,))
+            row = c.fetchone()
+            return row["balance"] if row else 0.0
+    
+    @retry_on_lock
     def log_action(self, user_id: int, action: str, details: str = ""):
         with self._cursor() as c:
             c.execute("INSERT INTO actions (user_id, action, details, timestamp) VALUES (?,?,?,?)",
@@ -346,7 +371,7 @@ class Database:
                       (user_id, day_start))
             return c.fetchone()[0]
     
-    # ----- Leaderboard (trader stats) -----
+    @retry_on_lock
     def update_trader_stats(self, user_id: int, pnl_change: float, is_win: bool = None):
         with self._cursor() as c:
             now = int(time.time())
@@ -369,13 +394,12 @@ class Database:
             c.execute("SELECT user_id, total_pnl, wins, losses, win_rate FROM trader_stats ORDER BY total_pnl DESC LIMIT ?", (limit,))
             return [dict(row) for row in c.fetchall()]
     
-    # ----- Exchange referrals -----
+    @retry_on_lock
     def record_exchange_click(self, user_id: int, exchange: str):
         with self._cursor() as c:
             c.execute("INSERT INTO exchange_refs (user_id, exchange, clicks) VALUES (?,?,1) ON CONFLICT(user_id,exchange) DO UPDATE SET clicks = clicks + 1",
                       (user_id, exchange))
     
-    # ----- Notification settings -----
     def get_notif_settings(self, user_id: int) -> Dict:
         with self._cursor() as c:
             c.execute("SELECT * FROM user_notif_settings WHERE user_id=?", (user_id,))
@@ -385,13 +409,14 @@ class Database:
             return {"user_id": user_id, "price_alert_enabled": 0, "price_threshold": 5.0,
                     "signal_enabled": 1, "news_enabled": 0, "coins": "BTC,ETH"}
     
+    @retry_on_lock
     def update_notif_settings(self, user_id: int, **kwargs):
         with self._cursor() as c:
             c.execute("INSERT OR IGNORE INTO user_notif_settings (user_id) VALUES (?)", (user_id,))
             set_clause = ", ".join([f"{k}=?" for k in kwargs.keys()])
             c.execute(f"UPDATE user_notif_settings SET {set_clause} WHERE user_id=?", tuple(kwargs.values()) + (user_id,))
     
-    # ----- Price cache for alerts -----
+    @retry_on_lock
     def update_price_cache(self, symbol: str, price: float):
         with self._cursor() as c:
             c.execute("INSERT OR REPLACE INTO price_cache (symbol, last_price, last_updated) VALUES (?,?,?)",
@@ -403,7 +428,7 @@ class Database:
             row = c.fetchone()
             return dict(row) if row else None
     
-    # ----- Signals history -----
+    @retry_on_lock
     def save_signal_history(self, user_id: int, symbol: str, action: str, confidence: int, price: float, tp_sl: Dict):
         with self._cursor() as c:
             c.execute('''INSERT INTO signals_history 
@@ -418,7 +443,6 @@ class Database:
             c.execute("SELECT * FROM signals_history WHERE user_id=? ORDER BY created_at DESC LIMIT ?", (user_id, limit))
             return [dict(row) for row in c.fetchall()]
     
-    # ----- Stats for admin -----
     def get_stats(self) -> Dict:
         with self._cursor() as c:
             c.execute("SELECT COUNT(*) FROM users")
@@ -444,6 +468,7 @@ class Database:
             daily = [{"day": row[0], "count": row[1]} for row in c.fetchall()]
             return {"avg_confidence": avg_conf, "action_counts": counts, "daily": daily}
     
+    @retry_on_lock
     def _update_daily_stats(self, timestamp: int, column: str, delta: int = 1):
         date = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d")
         with self._cursor() as c:
@@ -465,6 +490,7 @@ class Database:
                     VALUES (?, ?, ?, ?, ?)
                 ''', (date, defaults["new_users"], defaults["active_users"], defaults["subscriptions_sold"], defaults["revenue_usd"]))
     
+    @retry_on_lock
     def create_payment(self, user_id: int, amount: float, currency: str = "USDT") -> str:
         import uuid
         payment_id = str(uuid.uuid4())[:16]
@@ -473,7 +499,7 @@ class Database:
                       (payment_id, user_id, amount, currency, "pending", int(time.time())))
         return payment_id
     
-    # Admin helpers for signal nakrutka
+    @retry_on_lock
     def add_fake_signals(self, user_id: int, count: int, action: str = "free_signal") -> int:
         with self._cursor() as c:
             now = int(time.time())
@@ -484,6 +510,7 @@ class Database:
                 inserted += 1
             return inserted
     
+    @retry_on_lock
     def clear_user_signals(self, user_id: int, action: str = "free_signal") -> int:
         with self._cursor() as c:
             c.execute("DELETE FROM actions WHERE user_id=? AND action=?", (user_id, action))
@@ -519,7 +546,6 @@ class MarketProvider:
                 return ticker["last"], ticker.get("percentage", 0)
             except Exception as e:
                 logger.debug(f"{name} failed for {symbol}: {e}")
-        # mock
         base = 50000 if "BTC" in symbol else 3000
         price = base + random.uniform(-500, 500)
         change = random.uniform(-5, 5)
@@ -743,7 +769,7 @@ async def menu_cmd(message: Message, state: FSMContext):
     await message.answer("📋 *Main Menu*", parse_mode=ParseMode.MARKDOWN, reply_markup=main_menu())
     await state.clear()
 
-async def signal_cmd(message: Message, with_voice=False):
+async def signal_cmd(message: Message):
     user_id = message.from_user.id
     has_sub = db.has_subscription(user_id)
     used_today = db.get_signal_usage_today(user_id)
@@ -770,13 +796,6 @@ async def signal_cmd(message: Message, with_voice=False):
         tp_sl = {"take_profit_1": signal['tp1'], "take_profit_2": signal['tp2'], "stop_loss": signal['sl']}
         db.save_signal_history(user_id, "BTC/USDT", signal['action'], signal['confidence'], signal['price'], tp_sl)
         db.log_action(user_id, "free_signal" if not has_sub else "premium_signal", signal['action'])
-        if with_voice and VOICE_ENABLED:
-            voice_text = f"Signal for Bitcoin. Action: {signal['action']}. Price: {signal['price']} dollars. Confidence: {signal['confidence']} percent."
-            tts = gTTS(voice_text, lang='en')
-            audio = io.BytesIO()
-            tts.write_to_fp(audio)
-            audio.seek(0)
-            await message.answer_voice(types.BufferedInputFile(audio.read(), filename="signal.mp3"))
     except Exception as e:
         logger.error(f"Signal error: {e}")
         await message.answer("⚠️ Signal error. Try later.")
@@ -881,8 +900,17 @@ async def help_cmd(message: Message):
             "/subscribe, /pay, /referral, /balance, /withdraw, /profile\n"
             "/join_competition, /submit_trade, /leaderboard\n"
             "/exchanges, /settings, /history\n"
-            "/admin, /stats, /broadcast, /ban, /unban, /add_signals, /clear_signals, /signal_stats")
+            "/admin, /stats, /broadcast, /ban, /unban, /add_signals, /clear_signals, /signal_stats\n"
+            "/app – Open Mini App")
     await message.answer(text, parse_mode=ParseMode.MARKDOWN)
+
+async def app_cmd(message: Message):
+    webapp_url = f"https://{os.getenv('RAILWAY_PUBLIC_DOMAIN', 'localhost')}/static/index.html"
+    # Если домен не задан, используем относительный путь (для локального теста)
+    if "localhost" in webapp_url:
+        webapp_url = "http://localhost:8080/static/index.html"
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🚀 Open Mini App", web_app={"url": webapp_url})]])
+    await message.answer("🌟 Open the Ultimate Trading Terminal:", reply_markup=kb)
 
 # ===================================================================
 # КОМАНДЫ ЛИГИ И ПАРТНЁРОВ
@@ -1132,19 +1160,116 @@ async def cleanup_expired():
         c.execute("UPDATE users SET subscribed=0 WHERE subscribed=1 AND subscribe_until<?", (now,))
         logger.info("Cleanup expired subscriptions")
 
-async def price_alert_check():
-    market = get_market()
-    try:
-        price, _ = await market.fetch_price("BTC/USDT")
-        db.update_price_cache("BTC/USDT", price)
-    except:
-        pass
-
 def setup_scheduler():
     scheduler.add_job(cleanup_expired, CronTrigger(hour=0, minute=30))
-    scheduler.add_job(price_alert_check, "interval", minutes=15)
+    # price_alert_check отключён, чтобы не блокировать БД
     scheduler.start()
     logger.info("Scheduler started")
+
+# ===================================================================
+# ВЕБ-СЕРВЕР ДЛЯ МИНИ-ПРИЛОЖЕНИЯ (aiohttp)
+# ===================================================================
+async def webapp_index(request):
+    index_path = Path(__file__).parent / "webapp" / "index.html"
+    if not index_path.exists():
+        return web.Response(text="WebApp not found. Please create webapp folder.", status=404)
+    return web.FileResponse(index_path)
+
+async def webapp_static(request):
+    filename = request.match_info['filename']
+    file_path = Path(__file__).parent / "webapp" / filename
+    if not file_path.exists():
+        return web.Response(status=404)
+    return web.FileResponse(file_path)
+
+# API endpoints
+async def api_signal(request):
+    data = await request.json()
+    user_id = data.get('user_id')
+    symbol = data.get('params', {}).get('symbol', 'BTC/USDT')
+    # генерируем сигнал
+    market = get_market()
+    news = get_news()
+    analyzer = get_analyzer()
+    try:
+        price, change = await market.fetch_price(symbol)
+        prices = await market.get_historical_prices(symbol, 50)
+        news_items = await news.get_news(symbol.split('/')[0], 3)
+        avg_sentiment = sum(n["sentiment"] for n in news_items)/max(1,len(news_items))
+        signal = await analyzer.generate(symbol, prices, avg_sentiment)
+        has_sub = db.has_subscription(user_id) if user_id else False
+        result = {
+            "action": signal['action'],
+            "price": signal['price'],
+            "confidence": signal['confidence'],
+            "reason": signal['reason'],
+            "is_premium": has_sub
+        }
+        return web.json_response({"ok": True, "result": result})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)})
+
+async def api_chart(request):
+    data = await request.json()
+    symbol = data.get('params', {}).get('symbol', 'BTC/USDT')
+    timeframe = data.get('params', {}).get('timeframe', '1h')
+    limit = data.get('params', {}).get('limit', 50)
+    market = get_market()
+    prices = await market.get_historical_prices(symbol, limit)
+    # конвертируем в свечи (mock)
+    candles = []
+    base_price = prices[0] if prices else 50000
+    for i, p in enumerate(prices):
+        ts = int(time.time()) - (limit - i) * 3600
+        candles.append({"time": ts, "open": p-50, "high": p+50, "low": p-50, "close": p})
+    return web.json_response({"ok": True, "result": candles})
+
+async def api_profile(request):
+    data = await request.json()
+    user_id = data.get('user_id')
+    if not user_id:
+        return web.json_response({"ok": False, "error": "no user_id"})
+    user = db.get_user(user_id)
+    has_sub = db.has_subscription(user_id)
+    stats = db.get_referral_stats(user_id)
+    result = {
+        "user_id": user_id,
+        "has_subscription": has_sub,
+        "balance": stats['balance'],
+        "referral_count": stats['direct']
+    }
+    return web.json_response({"ok": True, "result": result})
+
+async def api_referral_link(request):
+    data = await request.json()
+    user_id = data.get('user_id')
+    link = db.get_referral_link(user_id) if user_id else ""
+    return web.json_response({"ok": True, "result": link})
+
+async def api_create_payment(request):
+    data = await request.json()
+    user_id = data.get('user_id')
+    if not user_id:
+        return web.json_response({"ok": False, "error": "no user_id"})
+    payment = get_payment()
+    link = await payment.create_invoice(user_id, Config.SUBSCRIPTION_PRICE_USD)
+    return web.json_response({"ok": True, "result": link})
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get('/static/index.html', webapp_index)
+    app.router.add_get('/static/{filename}', webapp_static)
+    app.router.add_post('/api/signal', api_signal)
+    app.router.add_post('/api/chart', api_chart)
+    app.router.add_post('/api/profile', api_profile)
+    app.router.add_post('/api/referral_link', api_referral_link)
+    app.router.add_post('/api/create_payment', api_create_payment)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 8080))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    logger.info(f"Web server started on port {port}")
 
 # ===================================================================
 # ЗАПУСК
@@ -1153,6 +1278,8 @@ async def main():
     Config.validate()
     logger.info("Starting CryptoPulse AI Ultimate")
     setup_scheduler()
+    # Запускаем веб-сервер в фоне
+    asyncio.create_task(start_web_server())
     bot = Bot(token=Config.API_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
     dp = Dispatcher(storage=MemoryStorage())
     
@@ -1170,6 +1297,7 @@ async def main():
     dp.message.register(withdraw_cmd, Command("withdraw"))
     dp.message.register(profile_cmd, Command("profile"))
     dp.message.register(help_cmd, Command("help"))
+    dp.message.register(app_cmd, Command("app"))
     # Лига и партнёры
     dp.message.register(join_competition_cmd, Command("join_competition"))
     dp.message.register(submit_trade_cmd, Command("submit_trade"))

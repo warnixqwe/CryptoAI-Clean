@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>CryptoPulse AI</title>
     <link rel="stylesheet" href="style.css">
-    <!-- TradingView Lightweight Charts -->
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.js"></script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
@@ -15,15 +14,11 @@
             <h1>CryptoPulse<span>AI</span></h1>
             <div class="badge" id="premiumBadge">FREE</div>
         </div>
-        
-        <!-- Навигация -->
         <div class="tabs">
             <button class="tab active" data-tab="signals">📡 Signals</button>
             <button class="tab" data-tab="chart">📈 Chart</button>
             <button class="tab" data-tab="profile">👤 Profile</button>
         </div>
-        
-        <!-- Вкладка сигналов -->
         <div id="signalsTab" class="tab-content active">
             <div class="symbol-selector" id="symbolSelector">
                 <button data-sym="BTC/USDT" class="sym-btn active">BTC</button>
@@ -34,15 +29,11 @@
             <div class="signal-card" id="signalCard">
                 <div class="signal-action" id="signalAction">--</div>
                 <div class="signal-price" id="signalPrice">$0.00</div>
-                <div class="confidence-bar">
-                    <div class="confidence-fill" id="confidenceFill"></div>
-                </div>
+                <div class="confidence-bar"><div class="confidence-fill" id="confidenceFill"></div></div>
                 <div class="signal-reason" id="signalReason"></div>
                 <button id="refreshSignal" class="btn-primary">⟳ Refresh</button>
             </div>
         </div>
-        
-        <!-- Вкладка графика -->
         <div id="chartTab" class="tab-content">
             <div id="chartContainer" style="height: 300px;"></div>
             <div class="timeframe-selector">
@@ -51,8 +42,6 @@
                 <button data-tf="1d" class="tf-btn">1d</button>
             </div>
         </div>
-        
-        <!-- Вкладка профиля -->
         <div id="profileTab" class="tab-content">
             <div class="profile-card">
                 <div class="stat-row"><span>User ID:</span><span id="profileUserId">-</span></div>
@@ -64,7 +53,6 @@
             <button id="subscribeBtn" class="btn-primary">💎 Buy Premium</button>
         </div>
     </div>
-    
     <script src="script.js"></script>
 </body>
 </html>

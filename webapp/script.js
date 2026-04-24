@@ -1,15 +1,10 @@
 const tg = window.Telegram.WebApp;
 tg.expand();
 const user = tg.initDataUnsafe?.user || { id: 0, username: 'guest' };
-
-// API Base URL (подставьте ваш реальный домен, если нужно)
 const API_BASE = '/api';
-
 let currentSymbol = 'BTC/USDT';
 let currentChart = null;
-let chartData = [];
 
-// -------------------- API Calls --------------------
 async function callApi(method, params = {}) {
     const res = await fetch(`${API_BASE}/${method}`, {
         method: 'POST',
@@ -21,7 +16,6 @@ async function callApi(method, params = {}) {
     return data.result;
 }
 
-// -------------------- Signal --------------------
 async function loadSignal() {
     try {
         const signal = await callApi('signal', { symbol: currentSymbol });
@@ -29,16 +23,10 @@ async function loadSignal() {
         document.getElementById('signalPrice').innerText = `$${signal.price.toLocaleString()}`;
         document.getElementById('confidenceFill').style.width = `${signal.confidence}%`;
         document.getElementById('signalReason').innerText = signal.reason;
-        // Обновить премиум-бейдж
-        if (signal.is_premium) {
-            document.getElementById('premiumBadge').innerText = '⭐ PREMIUM';
-        }
-    } catch(e) {
-        console.error(e);
-    }
+        if (signal.is_premium) document.getElementById('premiumBadge').innerText = '⭐ PREMIUM';
+    } catch(e) { console.error(e); }
 }
 
-// -------------------- Chart (Lightweight Charts) --------------------
 async function loadChart(timeframe = '1h') {
     const data = await callApi('chart', { symbol: currentSymbol, timeframe, limit: 50 });
     const container = document.getElementById('chartContainer');
@@ -57,7 +45,6 @@ async function loadChart(timeframe = '1h') {
     currentChart.timeScale().fitContent();
 }
 
-// -------------------- Profile --------------------
 async function loadProfile() {
     const profile = await callApi('profile');
     document.getElementById('profileUserId').innerText = profile.user_id;
@@ -68,25 +55,17 @@ async function loadProfile() {
 
 async function getReferralLink() {
     const link = await callApi('referral_link');
-    tg.showPopup({
-        title: 'Your referral link',
-        message: link,
-        buttons: [{ type: 'default', text: 'Copy', id: 'copy' }]
-    }, (btnId) => {
-        if (btnId === 'copy') {
-            tg.writeToClipboard(link);
-            tg.showAlert('Copied!');
-        }
+    tg.showPopup({ title: 'Referral link', message: link, buttons: [{ type: 'default', text: 'Copy', id: 'copy' }] }, btnId => {
+        if (btnId === 'copy') { tg.writeToClipboard(link); tg.showAlert('Copied!'); }
     });
 }
 
 async function buyPremium() {
-    const payLink = await callApi('create_payment');
-    if (payLink) tg.openTelegramLink(payLink);
-    else tg.showAlert('Payment gateway error');
+    const link = await callApi('create_payment');
+    if (link) tg.openTelegramLink(link);
+    else tg.showAlert('Payment error');
 }
 
-// -------------------- Navigation --------------------
 document.querySelectorAll('.tab').forEach(btn => {
     btn.addEventListener('click', () => {
         const tabId = btn.getAttribute('data-tab');
@@ -97,7 +76,6 @@ document.querySelectorAll('.tab').forEach(btn => {
         if (tabId === 'chart') loadChart();
     });
 });
-
 document.querySelectorAll('.sym-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         currentSymbol = btn.getAttribute('data-sym');
@@ -107,20 +85,16 @@ document.querySelectorAll('.sym-btn').forEach(btn => {
         if (document.getElementById('chartTab').classList.contains('active')) loadChart();
     });
 });
-
 document.querySelectorAll('.tf-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        const tf = btn.getAttribute('data-tf');
-        loadChart(tf);
+        loadChart(btn.getAttribute('data-tf'));
     });
 });
-
 document.getElementById('refreshSignal').addEventListener('click', loadSignal);
 document.getElementById('referralLinkBtn').addEventListener('click', getReferralLink);
 document.getElementById('subscribeBtn').addEventListener('click', buyPremium);
 
-// Initial load
 loadSignal();
 loadProfile();
