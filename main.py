@@ -61,7 +61,7 @@ load_dotenv()
 # ===================================================================
 class Config:
     API_TOKEN = os.getenv("API_TOKEN", "")
-    BOT_USERNAME = os.getenv("BOT_USERNAME", "CryptoPulseAIBot")
+    BOT_USERNAME = os.getenv("BOT_USERNAME", "SynthraCryptoBot")
     ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()]
     ALLOWED_UPDATES = ["message", "callback_query"]
     
@@ -908,7 +908,7 @@ async def app_cmd(message: Message):
     webapp_url = f"https://{os.getenv('RAILWAY_PUBLIC_DOMAIN', 'localhost')}/static/index.html"
     # Если домен не задан, используем относительный путь (для локального теста)
     if "localhost" in webapp_url:
-        webapp_url = "http://localhost:8080/static/index.html"
+        webapp_url = "http://web-production-989b49.up.railway.app/static/index.html"
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🚀 Open Mini App", web_app={"url": webapp_url})]])
     await message.answer("🌟 Open the Ultimate Trading Terminal:", reply_markup=kb)
 
@@ -1169,11 +1169,20 @@ def setup_scheduler():
 # ===================================================================
 # ВЕБ-СЕРВЕР ДЛЯ МИНИ-ПРИЛОЖЕНИЯ (aiohttp)
 # ===================================================================
+
 async def webapp_index(request):
     index_path = Path(__file__).parent / "webapp" / "index.html"
     if not index_path.exists():
         return web.Response(text="WebApp not found. Please create webapp folder.", status=404)
     return web.FileResponse(index_path)
+
+async def webapp_index(request):
+    print(f"Request path: {request.path}")
+    file_path = Path(__file__).parent / "webapp" / "index.html"
+    print(f"Looking for: {file_path}")
+    if not file_path.exists():
+        return web.Response(text=f"Not found: {file_path}", status=404)
+    return web.FileResponse(file_path)
 
 async def webapp_static(request):
     filename = request.match_info['filename']
