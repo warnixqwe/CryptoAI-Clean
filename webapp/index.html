@@ -2,57 +2,598 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>CryptoPulse AI</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>CryptoPulse AI | Ultimate Terminal</title>
+    <!-- Three.js Core -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.128.0/build/three.module.js"
+            }
+        }
+    </script>
+    <!-- Telegram WebApp SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Lightweight Charts (TradingView) -->
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.js"></script>
+    <!-- GSAP for animations -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+            background: #050a14;
+            color: #eef5ff;
+            overflow: hidden;
+            position: relative;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* 3D Canvas Background */
+        #bg-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* Main UI Overlay */
+        .app {
+            position: relative;
+            z-index: 2;
+            height: 100vh;
+            width: 100vw;
+            overflow-y: auto;
+            scroll-behavior: smooth;
+            padding: 20px 16px 80px;
+            backdrop-filter: blur(2px);
+        }
+
+        /* Custom Scrollbar */
+        .app::-webkit-scrollbar {
+            width: 4px;
+        }
+        .app::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+        }
+        .app::-webkit-scrollbar-thumb {
+            background: #00e0ff;
+            border-radius: 4px;
+        }
+
+        /* Neon Glass Card */
+        .card {
+            background: rgba(18, 25, 45, 0.65);
+            backdrop-filter: blur(16px);
+            border-radius: 32px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(0, 224, 255, 0.2);
+            transition: all 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+        .card:hover {
+            border-color: #00e0ff;
+            box-shadow: 0 0 28px rgba(0, 224, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+        h1 {
+            font-size: 28px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff, #00e0ff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            letter-spacing: -0.5px;
+        }
+        .badge {
+            background: linear-gradient(145deg, #1e2a3a, #0f1722);
+            padding: 6px 14px;
+            border-radius: 40px;
+            font-weight: 700;
+            font-size: 12px;
+            border: 1px solid #00e0ff;
+            box-shadow: 0 0 6px rgba(0,224,255,0.3);
+            transition: all 0.2s;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 60px;
+            padding: 6px;
+        }
+        .tab {
+            flex: 1;
+            background: transparent;
+            border: none;
+            padding: 12px 0;
+            border-radius: 50px;
+            color: #8e9aaf;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            backdrop-filter: blur(4px);
+        }
+        .tab.active {
+            background: #00e0ff;
+            color: #050a14;
+            box-shadow: 0 0 12px #00e0ff;
+        }
+
+        /* Symbol Selector */
+        .symbol-selector {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .sym-btn {
+            background: rgba(26, 31, 46, 0.8);
+            backdrop-filter: blur(4px);
+            border: none;
+            padding: 8px 20px;
+            border-radius: 40px;
+            color: #eef5ff;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .sym-btn.active {
+            background: #00e0ff;
+            color: #050a14;
+            box-shadow: 0 0 12px #00e0ff;
+        }
+
+        /* Signal Card */
+        .signal-card {
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .pulse-ring {
+            position: absolute;
+            top: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            height: 120px;
+            background: radial-gradient(circle, rgba(0,224,255,0.4) 0%, rgba(0,224,255,0) 70%);
+            border-radius: 50%;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .signal-action {
+            font-size: 56px;
+            font-weight: 900;
+            letter-spacing: 6px;
+            text-shadow: 0 0 10px currentColor;
+            margin: 16px 0;
+        }
+        .signal-price {
+            font-size: 32px;
+            font-weight: 800;
+            font-family: monospace;
+            margin: 12px 0;
+        }
+        .confidence-bar {
+            background: #2a2e3f;
+            border-radius: 20px;
+            height: 10px;
+            margin: 16px 0;
+            overflow: hidden;
+        }
+        .confidence-fill {
+            background: linear-gradient(90deg, #00e0ff, #0072ff);
+            width: 0%;
+            height: 100%;
+            border-radius: 20px;
+            transition: width 0.6s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+        }
+        .signal-reason {
+            font-size: 13px;
+            color: #a0b0c0;
+            margin: 12px 0;
+        }
+        .btn-primary, .btn-secondary {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 60px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 12px;
+        }
+        .btn-primary {
+            background: linear-gradient(90deg, #00c6ff, #0072ff);
+            color: white;
+            box-shadow: 0 4px 15px rgba(0,114,255,0.3);
+        }
+        .btn-primary:active { transform: scale(0.97); }
+        .btn-secondary {
+            background: rgba(30, 42, 58, 0.9);
+            color: #00e0ff;
+            border: 1px solid #00e0ff;
+        }
+
+        /* Stat Rows */
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 14px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            font-weight: 500;
+        }
+
+        /* Chart Container */
+        #chartContainer {
+            width: 100%;
+            height: 280px;
+            margin: 12px 0;
+        }
+
+        /* Timeframe selector */
+        .timeframe-selector {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 12px;
+        }
+        .tf-btn {
+            background: #1a1f2e;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 30px;
+            color: #8e9aaf;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .tf-btn.active {
+            background: #00e0ff;
+            color: #050a14;
+        }
+
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            bottom: 90px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(20px);
+            padding: 12px 24px;
+            border-radius: 60px;
+            color: white;
+            font-weight: 600;
+            z-index: 1000;
+            transition: transform 0.3s ease;
+            pointer-events: none;
+            border-left: 4px solid #00e0ff;
+        }
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+        }
+    </style>
 </head>
 <body>
-    <div class="container">
+    <canvas id="bg-canvas"></canvas>
+    <div class="app">
         <div class="header">
-            <h1>CryptoPulse<span>AI</span></h1>
+            <h1>CryptoPulse<span style="color:#00e0ff;">AI</span></h1>
             <div class="badge" id="premiumBadge">FREE</div>
         </div>
         <div class="tabs">
-            <button class="tab active" data-tab="signals">📡 Signals</button>
-            <button class="tab" data-tab="chart">📈 Chart</button>
-            <button class="tab" data-tab="profile">👤 Profile</button>
+            <button class="tab active" data-tab="signals">📡 SIGNALS</button>
+            <button class="tab" data-tab="chart">📈 CHART</button>
+            <button class="tab" data-tab="profile">👤 PROFILE</button>
         </div>
-        <div id="signalsTab" class="tab-content active">
-            <div class="symbol-selector" id="symbolSelector">
-                <button data-sym="BTC/USDT" class="sym-btn active">BTC</button>
-                <button data-sym="ETH/USDT" class="sym-btn">ETH</button>
-                <button data-sym="SOL/USDT" class="sym-btn">SOL</button>
-                <button data-sym="BNB/USDT" class="sym-btn">BNB</button>
-            </div>
-            <div class="signal-card" id="signalCard">
-                <div class="signal-action" id="signalAction">--</div>
-                <div class="signal-price" id="signalPrice">$0.00</div>
-                <div class="confidence-bar"><div class="confidence-fill" id="confidenceFill"></div></div>
-                <div class="signal-reason" id="signalReason"></div>
-                <button id="refreshSignal" class="btn-primary">⟳ Refresh</button>
-            </div>
-        </div>
-        <div id="chartTab" class="tab-content">
-            <div id="chartContainer" style="height: 300px;"></div>
-            <div class="timeframe-selector">
-                <button data-tf="1h" class="tf-btn active">1h</button>
-                <button data-tf="4h" class="tf-btn">4h</button>
-                <button data-tf="1d" class="tf-btn">1d</button>
+
+        <!-- Signals Tab -->
+        <div id="signalsTab" class="tab-content" style="display: block;">
+            <div class="card">
+                <div class="symbol-selector" id="symbolSelector">
+                    <button data-sym="BTC/USDT" class="sym-btn active">BTC</button>
+                    <button data-sym="ETH/USDT" class="sym-btn">ETH</button>
+                    <button data-sym="SOL/USDT" class="sym-btn">SOL</button>
+                    <button data-sym="BNB/USDT" class="sym-btn">BNB</button>
+                </div>
+                <div class="signal-card">
+                    <div class="pulse-ring" id="pulseRing"></div>
+                    <div class="signal-action" id="signalAction">---</div>
+                    <div class="signal-price" id="signalPrice">$0.00</div>
+                    <div class="confidence-bar"><div class="confidence-fill" id="confidenceFill"></div></div>
+                    <div class="signal-reason" id="signalReason">Fetching AI analysis...</div>
+                    <button id="refreshSignal" class="btn-primary">⟳ REFRESH SIGNAL</button>
+                </div>
             </div>
         </div>
-        <div id="profileTab" class="tab-content">
-            <div class="profile-card">
-                <div class="stat-row"><span>User ID:</span><span id="profileUserId">-</span></div>
-                <div class="stat-row"><span>Premium:</span><span id="profilePremium">-</span></div>
-                <div class="stat-row"><span>Balance:</span><span id="profileBalance">$0</span></div>
-                <div class="stat-row"><span>Referrals:</span><span id="profileRefs">0</span></div>
+
+        <!-- Chart Tab -->
+        <div id="chartTab" class="tab-content" style="display: none;">
+            <div class="card">
+                <div class="symbol-selector" id="chartSymbolSelector">
+                    <button data-sym="BTC/USDT" class="sym-btn active">BTC</button>
+                    <button data-sym="ETH/USDT" class="sym-btn">ETH</button>
+                    <button data-sym="SOL/USDT" class="sym-btn">SOL</button>
+                </div>
+                <div id="chartContainer"></div>
+                <div class="timeframe-selector">
+                    <button data-tf="1h" class="tf-btn active">1h</button>
+                    <button data-tf="4h" class="tf-btn">4h</button>
+                    <button data-tf="1d" class="tf-btn">1d</button>
+                </div>
             </div>
-            <button id="referralLinkBtn" class="btn-secondary">📋 Invite Link</button>
-            <button id="subscribeBtn" class="btn-primary">💎 Buy Premium</button>
+        </div>
+
+        <!-- Profile Tab -->
+        <div id="profileTab" class="tab-content" style="display: none;">
+            <div class="card">
+                <div class="stat-row"><span>🆔 User ID</span><span id="profileUserId">-</span></div>
+                <div class="stat-row"><span>⭐ Premium Status</span><span id="profilePremiumStatus">Inactive</span></div>
+                <div class="stat-row"><span>💰 Bonus Balance</span><span id="profileBalance">$0.00</span></div>
+                <div class="stat-row"><span>👥 Referrals</span><span id="profileRefs">0</span></div>
+            </div>
+            <button id="referralLinkBtn" class="btn-secondary">📋 GET INVITE LINK</button>
+            <button id="subscribeBtn" class="btn-primary">💎 UPGRADE TO PREMIUM</button>
         </div>
     </div>
-    <script src="script.js"></script>
+    <div id="toast" class="toast">Copied!</div>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // ==================== 3D ANIMATED BACKGROUND ====================
+        const canvas = document.getElementById('bg-canvas');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+
+        // Particle system
+        const particlesGeometry = new THREE.BufferGeometry();
+        const particlesCount = 1800;
+        const posArray = new Float32Array(particlesCount * 3);
+        for (let i = 0; i < particlesCount * 3; i += 3) {
+            posArray[i] = (Math.random() - 0.5) * 200;
+            posArray[i+1] = (Math.random() - 0.5) * 100;
+            posArray[i+2] = (Math.random() - 0.5) * 80 - 40;
+        }
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        const particlesMaterial = new THREE.PointsMaterial({ color: 0x00e0ff, size: 0.2, transparent: true, opacity: 0.5 });
+        const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+        scene.add(particlesMesh);
+
+        // Star background
+        const starGeo = new THREE.BufferGeometry();
+        const starCount = 1200;
+        const starPos = [];
+        for (let i = 0; i < starCount; i++) {
+            starPos.push((Math.random() - 0.5) * 400);
+            starPos.push((Math.random() - 0.5) * 200);
+            starPos.push((Math.random() - 0.5) * 100 - 60);
+        }
+        starGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(starPos), 3));
+        const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.15 });
+        const stars = new THREE.Points(starGeo, starMat);
+        scene.add(stars);
+
+        camera.position.z = 30;
+        function animateBg() {
+            requestAnimationFrame(animateBg);
+            particlesMesh.rotation.y += 0.002;
+            stars.rotation.x += 0.0005;
+            stars.rotation.y += 0.0003;
+            renderer.render(scene, camera);
+        }
+        animateBg();
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // ==================== TELEGRAM + API ====================
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.enableClosingConfirmation();
+        const user = tg.initDataUnsafe?.user || { id: 0, username: 'guest' };
+
+        const API_BASE = '/api';
+        let currentSymbol = 'BTC/USDT';
+        let currentChart = null;
+        let chartDataCache = [];
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.innerText = msg;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2000);
+        }
+
+        async function callApi(method, params = {}) {
+            try {
+                const res = await fetch(`${API_BASE}/${method}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: user.id, params })
+                });
+                const data = await res.json();
+                if (!data.ok) throw new Error(data.error);
+                return data.result;
+            } catch(e) {
+                console.error(e);
+                return null;
+            }
+        }
+
+        // ==================== SIGNAL LOGIC ====================
+        async function loadSignal() {
+            const activeSym = document.querySelector('#symbolSelector .sym-btn.active').getAttribute('data-sym');
+            currentSymbol = activeSym;
+            const ring = document.getElementById('pulseRing');
+            gsap.to(ring, { scale: 1.5, opacity: 0.6, duration: 0.4, repeat: 1, yoyo: true });
+            const signal = await callApi('signal', { symbol: activeSym });
+            if (!signal) {
+                document.getElementById('signalAction').innerText = 'ERROR';
+                document.getElementById('signalPrice').innerText = 'N/A';
+                return;
+            }
+            const actionElem = document.getElementById('signalAction');
+            const priceElem = document.getElementById('signalPrice');
+            const fillElem = document.getElementById('confidenceFill');
+            const reasonElem = document.getElementById('signalReason');
+            actionElem.innerText = signal.action;
+            priceElem.innerText = `$${signal.price.toLocaleString()}`;
+            fillElem.style.width = `${signal.confidence}%`;
+            reasonElem.innerText = signal.reason || 'AI analysis complete';
+            // color animation
+            if (signal.action === 'BUY') actionElem.style.color = '#00e676';
+            else if (signal.action === 'SELL') actionElem.style.color = '#ff3b30';
+            else actionElem.style.color = '#00e0ff';
+            if (signal.is_premium) document.getElementById('premiumBadge').innerHTML = '⭐ PREMIUM';
+        }
+
+        // ==================== CHART ====================
+        async function loadChart(timeframe = '1h') {
+            const activeSym = document.querySelector('#chartSymbolSelector .sym-btn.active').getAttribute('data-sym');
+            const data = await callApi('chart', { symbol: activeSym, timeframe, limit: 50 });
+            if (!data) return;
+            const container = document.getElementById('chartContainer');
+            if (!currentChart) {
+                currentChart = LightweightCharts.createChart(container, {
+                    width: container.clientWidth,
+                    height: 280,
+                    layout: { background: { color: 'transparent' }, textColor: '#eef5ff' },
+                    grid: { vertLines: { color: '#2a2e3f' }, horzLines: { color: '#2a2e3f' } }
+                });
+            }
+            const series = currentChart.addCandlestickSeries({
+                upColor: '#00e676', downColor: '#ff3b30', borderVisible: false,
+                wickUpColor: '#00e676', wickDownColor: '#ff3b30'
+            });
+            series.setData(data.map(d => ({ time: d.time, open: d.open, high: d.high, low: d.low, close: d.close })));
+            currentChart.timeScale().fitContent();
+        }
+
+        // ==================== PROFILE ====================
+        async function loadProfile() {
+            const profile = await callApi('profile');
+            if (!profile) return;
+            document.getElementById('profileUserId').innerText = profile.user_id;
+            document.getElementById('profilePremiumStatus').innerHTML = profile.has_subscription ? '✅ Active' : '❌ Free';
+            document.getElementById('profileBalance').innerText = `$${profile.balance.toFixed(2)}`;
+            document.getElementById('profileRefs').innerText = profile.referral_count;
+        }
+
+        async function getReferralLink() {
+            const link = await callApi('referral_link');
+            if (link) {
+                tg.showPopup({
+                    title: 'Your referral link',
+                    message: link,
+                    buttons: [{ type: 'default', text: 'Copy', id: 'copy' }]
+                }, (btnId) => {
+                    if (btnId === 'copy') {
+                        tg.writeToClipboard(link);
+                        showToast('Link copied!');
+                    }
+                });
+            }
+        }
+
+        async function buyPremium() {
+            const link = await callApi('create_payment');
+            if (link) tg.openTelegramLink(link);
+            else showToast('Payment gateway error');
+        }
+
+        // ==================== TAB SWITCHING + ANIMATIONS ====================
+        const tabs = document.querySelectorAll('.tab');
+        const contents = {
+            signals: document.getElementById('signalsTab'),
+            chart: document.getElementById('chartTab'),
+            profile: document.getElementById('profileTab')
+        };
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const target = tab.getAttribute('data-tab');
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                Object.values(contents).forEach(c => c.style.display = 'none');
+                contents[target].style.display = 'block';
+                gsap.fromTo(contents[target], { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4 });
+                if (target === 'chart') loadChart();
+                if (target === 'profile') loadProfile();
+                if (target === 'signals') loadSignal();
+            });
+        });
+
+        // Symbol selection for signals
+        document.querySelectorAll('#symbolSelector .sym-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#symbolSelector .sym-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                loadSignal();
+            });
+        });
+        document.querySelectorAll('#chartSymbolSelector .sym-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#chartSymbolSelector .sym-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                loadChart();
+            });
+        });
+        document.querySelectorAll('.tf-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                loadChart(btn.getAttribute('data-tf'));
+            });
+        });
+
+        document.getElementById('refreshSignal').addEventListener('click', loadSignal);
+        document.getElementById('referralLinkBtn').addEventListener('click', getReferralLink);
+        document.getElementById('subscribeBtn').addEventListener('click', buyPremium);
+
+        // Auto start
+        loadSignal();
+        loadProfile();
+
+        // Additional neon animation on signal load success
+        setInterval(() => {
+            const card = document.querySelector('.signal-card');
+            if (card) {
+                card.style.transition = 'all 0.2s';
+                card.style.transform = 'scale(1.01)';
+                setTimeout(() => card.style.transform = 'scale(1)', 200);
+            }
+        }, 30000);
+    </script>
 </body>
 </html>
