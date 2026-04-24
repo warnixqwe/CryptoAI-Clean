@@ -1079,6 +1079,18 @@ async def set_threshold_value(message: Message, state: FSMContext):
         await message.answer("❌ Invalid number. Please enter a positive number.")
     await state.clear()
 
+async def history_cmd(message: Message):
+    """Показать историю сигналов пользователя"""
+    history = db.get_user_signal_history(message.from_user.id, 10)
+    if not history:
+        await message.answer("No signals yet.")
+        return
+    text = "📜 *Last 10 signals*\n"
+    for h in history:
+        dt = datetime.fromtimestamp(h["created_at"]).strftime("%m-%d %H:%M")
+        text += f"{dt} {h['symbol']}: *{h['action']}* (conf {h['confidence']}%)\n"
+    await message.answer(text, parse_mode=ParseMode.MARKDOWN)
+
 # ===================================================================
 # АДМИН-ПАНЕЛЬ
 # ===================================================================
