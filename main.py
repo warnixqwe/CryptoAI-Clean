@@ -1,34 +1,29 @@
 import asyncio
 import logging
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher
 from aiogram.filters import Command
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from config import get_config
+from config import get_config, validate_config_or_exit
 
-cfg = get_config()
-logging.basicConfig(level=logging.INFO)
+# В самом верху market_data.py (после импортов)
+import logging
+from typing import Optional
 
-bot = Bot(token=cfg.API_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
-dp = Dispatcher(storage=MemoryStorage())
+_logger = logging.getLogger(__name__)
+_market_provider = None
 
-@dp.message(Command("start"))
-async def cmd_start(message: types.Message):
-    await message.answer("✅ Бот работает! Используй /help")
+def get_market_provider():
+    """Ленивая инициализация MarketDataProvider"""
+    global _market_provider
+    if _market_provider is None:
+        try:
+            from market_data import MarketDataProvider
+            _market_provider = MarketDataProvider()
+        except Exception as e:
+            _logger.error(f"MarketDataProvider init failed: {e}")
+            _market_provider = None
+    return _market_provider
 
-@dp.message(Command("help"))
-async def cmd_help(message: types.Message):
-    await message.answer("Команды: /start, /help, /menu, /signal (пока нет данных)")
-
-@dp.message()
-async def echo(message: types.Message):
-    await message.answer(f"Я получил: {message.text}")
-
-async def main():
-    await bot.delete_webhook(drop_pending_updates=True)
-    logging.info("Starting polling...")
-    await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+# А в классе MarketDataProvider все методы должны корректно обрабатывать None и возвращать мок-данные.
