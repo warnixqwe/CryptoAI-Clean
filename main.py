@@ -68,9 +68,10 @@ async def set_bot_commands(bot_instance: Bot):
 # ===================================================================
 
 async def on_startup(bot: Bot):
+    """Actions to perform when bot starts"""
     logger.info("Bot is starting up...")
     
-    # Неблокирующий прогрев кэша
+    # Неблокирующий прогрев кэша с обработкой ошибок
     try:
         market = get_market_provider()
         await market.get_market_summary()
@@ -85,21 +86,28 @@ async def on_startup(bot: Bot):
     except Exception as e:
         logger.warning(f"News warm-up failed (non-critical): {e}")
     
-    # Запуск планировщика
-    start_scheduler()
-    logger.info("Background scheduler started")
+    # Запуск планировщика (он тоже может падать — оберните)
+    try:
+        start_scheduler()
+        logger.info("Background scheduler started")
+    except Exception as e:
+        logger.warning(f"Scheduler start failed: {e}")
     
-    await set_bot_commands(bot)
-    logger.info("Bot commands set")
+    # Установка команд бота
+    try:
+        await set_bot_commands(bot)
+        logger.info("Bot commands set")
+    except Exception as e:
+        logger.warning(f"Failed to set commands: {e}")
     
-    # Уведомление админов
+    # Уведомление админов (не критично)
     for admin_id in cfg.ADMIN_IDS:
         try:
-            await bot.send_message(admin_id, "🤖 CryptoPulse AI Bot Started")
-        except:
-            pass
+            await bot.send_message(admin_id, "✅ CryptoPulse AI bot started!")
+        except Exception as e:
+            logger.warning(f"Failed to notify admin {admin_id}: {e}")
     
-    logger.info("Startup complete")
+    logger.info("Startup complete - bot is ready")
 
 async def on_shutdown(bot: Bot):
     """Actions to perform when bot stops"""
@@ -155,11 +163,9 @@ async def setup_webhook(bot_instance: Bot, webhook_url: str, webhook_path: str):
 # ===================================================================
 
 async def run_polling():
-    """Run bot in polling mode (default)"""
     logger.info("Starting bot in polling mode")
-    
-    # Create bot and dispatcher
     bot_instance = Bot(token=cfg.API_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
+    await bot_instance.delete_webhook(drop_pending_updates=True)  # ОБЯЗАТЕЛЬНО
     storage = MemoryStorage()
     dispatcher = Dispatcher(storage=storage)
     
