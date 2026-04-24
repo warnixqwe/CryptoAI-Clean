@@ -3,23 +3,17 @@ import logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.client.default import DefaultBotProperties
-from aiogram.fsm.storage.memory import MemoryStorage
-
 from config import get_config
 
-cfg = get_config()
 logging.basicConfig(level=logging.INFO)
+cfg = get_config()
 
 bot = Bot(token=cfg.API_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
-dp = Dispatcher(storage=MemoryStorage())
+dp = Dispatcher()
 
 @dp.message(Command("start"))
-async def cmd_start(message: types.Message):
-    await message.answer("✅ Бот работает! Используй /help")
-
-@dp.message(Command("help"))
-async def cmd_help(message: types.Message):
-    await message.answer("Команды: /start, /help, /menu, /signal (пока нет данных)")
+async def start(message: types.Message):
+    await message.answer("✅ Бот работает! Команда /start получена.")
 
 @dp.message()
 async def echo(message: types.Message):
