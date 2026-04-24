@@ -74,9 +74,9 @@ class Config:
     EXCHANGES = ["binance", "bybit", "okx"]
     PRIMARY_EXCHANGE = os.getenv("PRIMARY_EXCHANGE", "okx")
     
-    SUBSCRIPTION_PRICE_USD = 20.0
+    SUBSCRIPTION_PRICE_USD = 5.0
     SUBSCRIPTION_DAYS = 30
-    FREE_SIGNALS_PER_DAY = 1
+    FREE_SIGNALS_PER_DAY = 3
     
     MAX_REFERRAL_LEVELS = 5
     REFERRAL_REWARDS = [50.0, 15.0, 7.0, 3.0, 1.0]
