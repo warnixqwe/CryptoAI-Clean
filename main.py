@@ -268,6 +268,15 @@ class Database:
                 details TEXT,
                 timestamp INTEGER
             )''')
+
+            c.execute('''CREATE TABLE IF NOT EXISTS admin_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                admin_id INTEGER,
+                action TEXT,
+                target_user INTEGER,
+                details TEXT,
+                timestamp INTEGER
+            )''')
             # Indexes
             c.execute("CREATE INDEX IF NOT EXISTS idx_actions_user ON actions(user_id, timestamp)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_signals_user ON signals_history(user_id, created_at)")
@@ -299,10 +308,9 @@ class Database:
             return row["language"] if row else "en"
     
     @retry_on_lock
-    def update_language(self, user_id: int, lang: str):
+    def update_language(self, user_id: int, language: str):
         with self._cursor() as c:
-            c.execute("UPDATE users SET language=? WHERE user_id=?", (lang, user_id))
-            logger.info(f"User {user_id} changed language to {lang}")
+            c.execute("UPDATE users SET language = ? WHERE user_id = ?", (language, user_id))
     
     def has_subscription(self, user_id: int) -> bool:
         with self._cursor() as c:
@@ -845,12 +853,14 @@ async def start_cmd(message: Message, state: FSMContext):
         referrer = db.get_by_referral_code(ref_code)
         if referrer and referrer != user.id:
             db.add_referral(referrer, user.id)
-    lang = db.get_user_language(user.id)
-    welcome_text = {
-        "en": f"🚀 *Welcome to SynthraCrypto*, {user.first_name}!\n\nAI-powered crypto signals with TP/SL.\n💰 Premium: ${Config.SUBSCRIPTION_PRICE_USD}/{Config.SUBSCRIPTION_DAYS} days\nUse /menu",
-        "ru": f"🚀 *Добро пожаловать в SynthraCrypto*, {user.first_name}!\n\nAI-сигналы с TP/SL.\n💰 Премиум: ${Config.SUBSCRIPTION_PRICE_USD}/{Config.SUBSCRIPTION_DAYS} дней\nИспользуйте /menu"
-    }.get(lang, welcome_text_en)
-    await message.answer(welcome_text, parse_mode=ParseMode.MARKDOWN, reply_markup=main_menu())
+    await message.answer(
+        f"🚀 *Welcome to SynthraCrypto AI*, {user.first_name}!\n\n"
+        f"💰 Premium: ${Config.SUBSCRIPTION_PRICE_USD}/{Config.SUBSCRIPTION_DAYS} days\n"
+        f"Use /menu\n"
+        f"Use /app to open web app",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=main_menu()
+    )
     await state.clear()
 
 async def menu_cmd(message: Message, state: FSMContext):
@@ -1245,6 +1255,29 @@ async def admin_clear_signals_user(message: Message, state: FSMContext):
         await message.answer("Invalid user ID.")
     await state.clear()
 
+async def admin_give_premium_cmd(message: Message):
+    """Выдача премиум-подписки пользователю. Использование: /give_premium <user_id> [days]"""
+    if not Config.is_admin(message.from_user.id):
+        return
+    parts = message.text.split()
+    if len(parts) < 2:
+        await message.answer("❌ Usage: /give_premium <user_id> [days]\nExample: /give_premium 123456789 30")
+        return
+    try:
+        target = int(parts[1])
+        days = int(parts[2]) if len(parts) > 2 else Config.SUBSCRIPTION_DAYS
+        db.activate_subscription(target, days, 0)  # 0 = бесплатно для админа
+        await message.answer(f"✅ Premium subscription activated for user {target} for {days} days.")
+        # Если есть метод log_admin_action, раскомментируйте
+        # await db.log_admin_action(message.from_user.id, "give_premium", target, f"days={days}")
+        # Уведомление пользователя
+        try:
+            await message.bot.send_message(target, f"🎉 You have received a free premium subscription for {days} days! Use /menu to enjoy unlimited signals.")
+        except:
+            pass
+    except Exception as e:
+        await message.answer(f"Error: {e}")
+
 # ===================================================================
 # CALLBACK HANDLERS
 # ===================================================================
@@ -1474,12 +1507,30 @@ async def start_web_server():
     app.router.add_post('/api/profile', api_profile)
     app.router.add_post('/api/referral_link', api_referral_link)
     app.router.add_post('/api/create_payment', api_create_payment)
+    app.router.add_post('/api/marketCoins', api_market_coins)
+    app.router.add_post('/api/marketInsight', api_market_insight)
+    app.router.add_post('/api/news', api_news)
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.environ.get("PORT", 8080))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
     logger.info(f"Web server started on port {port}")
+
+async def api_market_coins(request):
+    # вернём список популярных монет
+    return web.json_response({"ok": True, "result": ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"]})
+
+async def api_market_insight(request):
+    return web.json_response({"ok": True, "result": "Market sentiment: neutral"})
+
+async def api_news(request):
+    # можно вернуть мок-новости
+    news_items = [
+        {"title": "Bitcoin surges past $70k", "sentiment": 0.7, "source": "CoinDesk", "published_at": int(time.time())-3600},
+        {"title": "Ethereum ETF approved", "sentiment": 0.9, "source": "CoinTelegraph", "published_at": int(time.time())-7200}
+    ]
+    return web.json_response({"ok": True, "result": news_items})
 
 # ===================================================================
 # ЗАПУСК
@@ -1517,6 +1568,7 @@ async def main():
     # Админ-команды (текстовые)
     dp.message.register(admin_cmd, Command("admin"))
     dp.message.register(admin_stats_cmd, Command("stats"))
+    dp.message.register(admin_give_premium_cmd, Command("give_premium"))
     # FSM обработчики
     dp.message.register(withdraw_address, WithdrawStates.waiting_address)
     dp.message.register(admin_broadcast_send, BroadcastStates.waiting_message)
