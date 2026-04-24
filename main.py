@@ -58,6 +58,10 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from aiohttp import web
 
+from aiohttp import web
+import json
+from pathlib import Path
+
 # Пытаемся импортировать опциональные модули
 try:
     import ccxt
@@ -1198,11 +1202,95 @@ async def main():
     finally:
         await bot.session.close()
 
+async def handle_webapp(request):
+    """Отдаёт HTML-страницу мини-приложения"""
+    html_path = Path(__file__).parent / "webapp" / "index.html"
+    if not html_path.exists():
+        return web.Response(text="WebApp not found", status=404)
+    return web.FileResponse(html_path)
+
+async def handle_api_signal(request):
+    """API: получить сигнал"""
+    data = await request.json()
+    user_id = data.get('user_id')
+    symbol = data.get('params', {}).get('symbol', 'BTC/USDT')
+    # Генерация сигнала (можно переиспользовать существующую логику)
+    # Для демо – мок
+    return web.json_response({
+        "ok": True,
+        "result": {
+            "action": "BUY",
+            "price": 65432.1,
+            "confidence": 87,
+            "reason": "RSI oversold",
+            "is_premium": False
+        }
+    })
+
+async def handle_api_chart(request):
+    """API: получить данные для графика"""
+    data = await request.json()
+    symbol = data.get('params', {}).get('symbol', 'BTC/USDT')
+    timeframe = data.get('params', {}).get('timeframe', '1h')
+    limit = data.get('params', {}).get('limit', 50)
+    # Генерация мок-данных для свечей
+    candles = []
+    base = 50000 if "BTC" in symbol else 3000
+    for i in range(limit):
+        ts = int(time.time()) - (limit - i) * 3600
+        openp = base + random.uniform(-200, 200)
+        high = openp + random.uniform(0, 100)
+        low = openp - random.uniform(0, 100)
+        close = (openp + high + low) / 3
+        candles.append({"time": ts, "open": openp, "high": high, "low": low, "close": close})
+    return web.json_response({"ok": True, "result": candles})
+
+async def handle_api_profile(request):
+    """API: данные профиля"""
+    # Здесь можно получить реальные данные пользователя из БД
+    return web.json_response({
+        "ok": True,
+        "result": {
+            "user_id": 123456,
+            "has_subscription": False,
+            "balance": 12.50,
+            "referral_count": 3
+        }
+    })
+
+async def handle_api_referral_link(request):
+    """API: получить реферальную ссылку"""
+    # Реальная ссылка формируется из БД
+    return web.json_response({
+        "ok": True,
+        "result": "https://t.me/CryptoPulseAIBot?start=ref_ABCD1234"
+    })
+
+async def handle_api_create_payment(request):
+    """API: создать платёж"""
+    return web.json_response({
+        "ok": True,
+        "result": "https://t.me/CryptoBot?start=pay_example"
+    })
+
+async def start_web_server():
+    """Запуск aiohttp сервера для WebApp"""
+    app = web.Application()
+    app.router.add_get('/', handle_webapp)
+    app.router.add_post('/api/signal', handle_api_signal)
+    app.router.add_post('/api/chart', handle_api_chart)
+    app.router.add_post('/api/profile', handle_api_profile)
+    app.router.add_post('/api/referral_link', handle_api_referral_link)
+    app.router.add_post('/api/create_payment', handle_api_create_payment)
+    # Также раздаём статику (CSS, JS)
+    app.router.add_static('/static', Path(__file__).parent / "webapp")
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", 8080)  # Railway даёт PORT
+    await site.start()
+    logger.info("Web server started on port 8080")
+
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
-    except Exception as e:
-        logger.critical(f"Fatal error: {e}")
-        sys.exit(1)
+     loop = asyncio.get_event_loop()
+     loop.create_task(start_web_server())
+     loop.run_until_complete(main())
